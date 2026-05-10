@@ -143,7 +143,7 @@ def create_rank_card(username, avatar_bytes, xp, level):
 async def on_ready():
     print(f"✅ {bot.user} online sebagai Asisten Lurah BFL!")
     await bot.change_presence(
-        activity=discord.Activity(type=discord.ActivityType.watching, name="Desa BFL 🏘️")
+        activity=discord.Activity(type=discord.ActivityType.watching, name="ELVAN JUNIOR 😈")
     )
     check_tiktok.start()
 
