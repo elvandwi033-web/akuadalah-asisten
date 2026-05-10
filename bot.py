@@ -317,7 +317,7 @@ async def help_cmd(ctx):
                     value="`!addrole @user <nama_role>`\n`!removerole @user <nama_role>`", inline=False)
     embed.add_field(name="📢 Pengumuman (Owner — via DM bot)",
                     value="`!pengumuman #channel <pesan>`", inline=False)
-    embed.set_footer(text="Asisten Lurah BFL • Desa BFL")
+    embed.set_footer(text="Asisten Lurah BFL • Elvan Junior")
     await ctx.send(embed=embed)
 
 # ─────────────────────────────────────────────
