@@ -217,11 +217,16 @@ async def leaderboard(ctx):
     await ctx.send(embed=embed)
 
 @bot.command(name="pengumuman")
-async def pengumuman(ctx, channel: discord.TextChannel, *, pesan: str):
+async def pengumuman(ctx, channel_id: int, *, pesan: str):
     if not isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("⚠️ Command ini hanya bisa digunakan via DM.")
         return
     if ctx.author.id != OWNER_ID:
         await ctx.send("❌ Kamu tidak punya izin untuk menggunakan perintah ini.")
+        return
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        await ctx.send("❌ Channel tidak ditemukan. Pastikan ID benar.")
         return
     embed = discord.Embed(
         title="📢 PENGUMUMAN",
