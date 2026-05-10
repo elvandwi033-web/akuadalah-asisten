@@ -357,7 +357,7 @@ class CloseTicketView(View):
 async def on_ready():
     print(f"✅ {bot.user} online sebagai Asisten Lurah BFL!")
     await bot.change_presence(
-        activity=discord.Activity(type=discord.ActivityType.watching, name="Desa BFL 🏘️")
+        activity=discord.Activity(type=discord.ActivityType.watching, name="ELVAN JUNIOR")
     )
     check_tiktok.start()
     print("✅ Semua sistem aktif.")
@@ -728,7 +728,7 @@ async def verif_cmd(ctx):
         await ctx.send(
             "📋 **Verifikasi BFL**\n\n"
             "Kirim foto bukti kamu di sini.\n"
-            "Admin akan mereviu dan memberikan role: **Moderator**, **Stream**, atau **Clipper**."
+            "Admin akan mereviu dan memberikan role: **Moderator**, atau **Clipper**."
         )
         return
     await ctx.send(
@@ -739,7 +739,7 @@ async def verif_cmd(ctx):
         await ctx.author.send(
             "📋 **Verifikasi BFL**\n\n"
             "Kirim foto bukti kamu di sini.\n"
-            "Admin akan mereviu dan memberikan role: **Moderator**, **Stream**, atau **Clipper**."
+            "Admin akan mereviu dan memberikan role: **Moderator**, atau **Clipper**."
         )
     except discord.Forbidden:
         await ctx.send(
@@ -769,7 +769,7 @@ async def help_cmd(ctx):
         inline=False
     )
     embed.add_field(
-        name="📋 Verifikasi Mod/Stream/Clipper",
+        name="📋 Verifikasi Mod/Clipper",
         value="`!verif` — Mulai verifikasi via DM bot",
         inline=False
     )
