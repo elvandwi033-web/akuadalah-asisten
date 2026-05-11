@@ -851,7 +851,6 @@ async def on_ready():
 
     check_tiktok.start()
     check_giveaways.start()
-    send_quote.start()
     print("✅ Semua sistem aktif.")
 
 @bot.event
@@ -1021,38 +1020,6 @@ async def check_giveaways():
 async def before_check_giveaways():
     await bot.wait_until_ready()
 
-# ═══════════════════════════════════════════════════════
-#  TASKS — QUOTE OF THE DAY (07:00 & 19:00 WIB)
-# ═══════════════════════════════════════════════════════
-@tasks.loop(minutes=1)
-async def send_quote():
-    now_wib = datetime.datetime.now(WIB)
-    if now_wib.minute != 0:
-        return
-    if now_wib.hour not in [7, 19]:
-        return
-    settings = load_settings()
-    quote_ch_id = settings.get("quote_channel_id")
-    if not quote_ch_id:
-        return
-    ch = bot.get_channel(int(quote_ch_id))
-    if not ch:
-        return
-    quotes = load_quotes()
-    quote  = random.choice(quotes)
-    sesi   = "🌅 Pagi" if now_wib.hour == 7 else "🌙 Malam"
-    embed  = discord.Embed(
-        title=f"💬 Quote of the Day — {sesi}",
-        description=f"*\"{quote}\"*",
-        color=discord.Color.from_rgb(255, 200, 50) if now_wib.hour == 7 else discord.Color.from_rgb(80, 80, 180),
-        timestamp=datetime.datetime.utcnow()
-    )
-    embed.set_footer(text="Asisten Lurah BFL • Quote of the Day")
-    await ch.send(embed=embed)
-
-@send_quote.before_loop
-async def before_quote():
-    await bot.wait_until_ready()
 
 # ═══════════════════════════════════════════════════════
 #  TASKS — TIKTOK
@@ -1328,7 +1295,7 @@ async def set_quote_channel(ctx, channel_id: int):
     settings = load_settings()
     settings["quote_channel_id"] = str(channel_id)
     save_settings(settings)
-    await ctx.send(f"✅ Quote of the Day akan dikirim ke **#{ch.name}** setiap jam 7 pagi dan 7 malam WIB.")
+    await ctx.send(f"✅ Channel quote diset ke **#{ch.name}**. Gunakan `!kirimquote` untuk kirim manual.")
 
 @bot.command(name="addquote")
 async def add_quote(ctx, *, quote: str):
@@ -1343,19 +1310,39 @@ async def add_quote(ctx, *, quote: str):
     save_json(QUOTE_FILE, quotes)
     await ctx.send(f"✅ Quote ditambahkan! Total: **{len(quotes)}** quote.")
 
-@bot.command(name="quotenow")
-async def quote_now(ctx):
-    if ctx.author.id != OWNER_ID:
+@bot.command(name="kirimquote")
+async def kirim_quote_cmd(ctx, channel_id: int = None):
+    """Kirim quote manual ke channel. Hanya owner via DM."""
+    if not isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("⚠️ Hanya via DM bot.")
         return
+    if ctx.author.id != OWNER_ID:
+        await ctx.send("❌ Hanya owner.")
+        return
+
+    # Tentukan channel tujuan
+    if channel_id:
+        ch = bot.get_channel(channel_id)
+    else:
+        settings = load_settings()
+        saved_id = settings.get("quote_channel_id")
+        ch = bot.get_channel(int(saved_id)) if saved_id else None
+
+    if not ch:
+        await ctx.send("❌ Channel tidak ditemukan. Set dulu dengan `!setquotechannel <id>` atau sertakan ID channel: `!kirimquote <channel_id>`")
+        return
+
     quotes = load_quotes()
     quote  = random.choice(quotes)
     embed  = discord.Embed(
-        title="💬 Quote",
+        title="💬 Quote of the Day",
         description=f"*\"{quote}\"*",
-        color=discord.Color.gold()
+        color=discord.Color.gold(),
+        timestamp=datetime.datetime.utcnow()
     )
-    embed.set_footer(text="Asisten Lurah BFL")
-    await ctx.send(embed=embed)
+    embed.set_footer(text="Asisten Lurah BFL • Quote of the Day")
+    await ch.send(embed=embed)
+    await ctx.send(f"✅ Quote berhasil dikirim ke **#{ch.name}**!")
 
 # ═══════════════════════════════════════════════════════
 #  COMMANDS — BANNER INFO
@@ -1634,7 +1621,7 @@ async def help_cmd(ctx):
     embed.add_field(name="🔇 Moderasi",
         value="`!timeout @user <menit>`\n`!ban @user`\n`!unban <id>`\n`!clear [n]`", inline=False)
     embed.add_field(name="📢 Owner (via DM bot)",
-        value="`!pengumuman <id> <pesan>`\n`!setgiveaway <channel_id>`\n`!setquotechannel <id>`\n`!addquote <quote>`\n`!quotenow`", inline=False)
+        value="`!pengumuman <id> <pesan>`\n`!setgiveaway <channel_id>`\n`!setquotechannel <id>`\n`!addquote <quote>`\n`!kirimquote [channel_id]`", inline=False)
     embed.add_field(name="⚙️ Setup (Owner)",
         value="`!setupticket`", inline=False)
     embed.set_footer(text="Asisten Lurah BFL • Desa BFL")
