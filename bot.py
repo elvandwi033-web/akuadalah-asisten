@@ -1642,18 +1642,22 @@ music_idle_task = {}   # guild_id -> asyncio Task
 YTDL_OPTS = {
     "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
     "noplaylist": False,
-    "quiet": False,
-    "no_warnings": False,
+    "quiet": True,
+    "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
     "extract_flat": False,
     "nocheckcertificate": True,
     "ignoreerrors": True,
-    "logtostderr": False,
     "geo_bypass": True,
-    "age_limit": None,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "web"],
+        }
+    },
     "http_headers": {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip",
+        "Accept-Language": "en-US,en;q=0.9",
     },
 }
 
