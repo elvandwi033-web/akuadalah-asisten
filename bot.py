@@ -1829,8 +1829,6 @@ async def show_inventory(ctx, member: discord.Member = None):
 # ═══════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════
-bot.run(TOKEN)
-
 
 # ====================== MARKET HELP SYSTEM ======================
 
@@ -1952,3 +1950,4 @@ async def chart(ctx):
     plt.close()
 
     await ctx.send(file=discord.File(chart_path))
+bot.run(TOKEN)
