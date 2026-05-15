@@ -1726,18 +1726,41 @@ def save_coins(d):
     save_json(COIN_FILE, d)
 
 def get_coins(uid: str) -> int:
+    """Selalu return int, pastikan uid string, handle format lama (int key)."""
+    uid = str(uid)
     coins = load_coins()
-    return coins.get(uid, 0)
+    # Cek string key dulu, fallback ke int key (format lama)
+    if uid in coins:
+        return int(coins[uid])
+    if int(uid) in coins:
+        # Migrasi key int ke string
+        val = int(coins[int(uid)])
+        coins[uid] = val
+        del coins[int(uid)]
+        save_coins(coins)
+        return val
+    return 0
 
 def add_coins(uid: str, amount: int) -> int:
+    """Tambah/kurang coin, pastikan uid string, return saldo baru."""
+    uid = str(uid)
     coins = load_coins()
-    current = coins.get(uid, 0)
+    # Migrasi int key ke string key jika ada
+    if int(uid) in coins and uid not in coins:
+        coins[uid] = coins.pop(int(uid))
+    current = int(coins.get(uid, 0))
     coins[uid] = max(0, current + amount)
     save_coins(coins)
     return coins[uid]
 
 def ensure_coins(uid: str):
+    uid = str(uid)
     coins = load_coins()
+    # Migrasi int key ke string key jika ada
+    if int(uid) in coins and uid not in coins:
+        coins[uid] = coins.pop(int(uid))
+        save_coins(coins)
+        return
     if uid not in coins:
         coins[uid] = 0
         save_coins(coins)
@@ -1994,15 +2017,17 @@ async def convert_coin(ctx, amount:int=None):
     if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
         return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
     if not amount or amount < 100:
-        return await ctx.send("❌ Minimum convert 100 coin")
-    bal = get_coins(str(ctx.author.id))
+        return await ctx.send("❌ Minimum convert **100 coin**. Contoh: `!convertcoin 100`")
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    bal = get_coins(uid)
     if bal < amount:
-        return await ctx.send("❌ Coin tidak cukup")
-    add_coins(str(ctx.author.id), -amount)
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{bal:,} coin**, butuh: **{amount:,} coin**.")
+    add_coins(uid, -amount)
     burn_coins(amount)
     idr = coin_to_idr(amount)
-    await ctx.author.send(f"✅ Convert berhasil: {amount} coin -> Rp{idr:,}")
-    await ctx.send("✅ Convert berhasil, cek DM.")
+    await ctx.author.send(f"✅ Convert berhasil!\n**{amount:,} coin** → **Rp{idr:,}**\nHubungi admin untuk pencairan.")
+    await ctx.send(f"✅ Convert **{amount:,} coin** berhasil. Cek DM kamu!")
 
 @bot.command(name="setprice")
 async def setprice(ctx, buy:int=None):
@@ -2053,19 +2078,21 @@ async def slot_game(ctx, bet:int=None):
         return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
     if not bet or bet < 1:
         return await ctx.send("❌ Min bet 1 coin")
-    uid=str(ctx.author.id)
-    if get_coins(uid) < bet:
-        return await ctx.send("❌ Coin tidak cukup")
-    add_coins(uid,-bet)
-    roll=random.randint(1,100)
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    balance = get_coins(uid)
+    if balance < bet:
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{bet:,} coin**.")
+    add_coins(uid, -bet)
+    roll = random.randint(1, 100)
     if roll <= 45:
-        multi=random.choice([1,1.5,2])
-        reward=int(bet*multi)
-        add_coins(uid,reward)
-        msg=f"🎰 JACKPOT! Menang {reward} coin (x{multi})"
+        multi = random.choice([1, 1.5, 2])
+        reward = int(bet * multi)
+        add_coins(uid, reward)
+        msg = f"🎰 JACKPOT! Menang **{reward} coin** (x{multi}) | Saldo: **{get_coins(uid):,} coin**"
     else:
         burn_coins(bet)
-        msg=f"💀 Kalah {bet} coin"
+        msg = f"💀 Kalah **{bet} coin** | Saldo: **{get_coins(uid):,} coin**"
     await ctx.send(msg)
 
 MINING_LEVELS = {
@@ -2076,63 +2103,84 @@ MINING_LEVELS = {
 
 @bot.command(name="mining")
 async def mining_cmd(ctx, level:int=None):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
     if not level or level not in MINING_LEVELS:
-        return await ctx.send("Gunakan !mining <1/2/3>")
-    uid=str(ctx.author.id)
-    data=MINING_LEVELS[level]
-    if get_coins(uid) < data["cost"]:
-        return await ctx.send("❌ Coin tidak cukup")
-    add_coins(uid,-data["cost"])
-    mining=load_json(MINING_FILE,{})
-    finish=(datetime.datetime.utcnow()+datetime.timedelta(hours=data["hours"])).timestamp()
-    mining[uid]={"finish":finish,"level":level}
-    save_json(MINING_FILE,mining)
-    await ctx.send(f"⛏️ Mining level {level} dimulai selama {data['hours']} jam")
+        return await ctx.send("Gunakan `!mining <1/2/3>`\nLevel 1: 10 coin/10 jam | Level 2: 20 coin/15 jam | Level 3: 50 coin/20 jam")
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    data = MINING_LEVELS[level]
+    balance = get_coins(uid)
+    if balance < data["cost"]:
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{data['cost']:,} coin**.")
+    # Cek jika sudah ada mining aktif
+    mining = load_json(MINING_FILE, {})
+    if uid in mining:
+        finish_ts = mining[uid]["finish"]
+        if datetime.datetime.utcnow().timestamp() < finish_ts:
+            sisa = finish_ts - datetime.datetime.utcnow().timestamp()
+            h, r = divmod(int(sisa), 3600)
+            m, s = divmod(r, 60)
+            return await ctx.send(f"⏳ Masih ada mining aktif! Selesai dalam **{h}j {m}m {s}d**. Gunakan `!claimmining`.")
+    add_coins(uid, -data["cost"])
+    finish = (datetime.datetime.utcnow() + datetime.timedelta(hours=data["hours"])).timestamp()
+    mining[uid] = {"finish": finish, "level": level}
+    save_json(MINING_FILE, mining)
+    await ctx.send(f"⛏️ Mining level **{level}** dimulai selama **{data['hours']} jam** | Saldo: **{get_coins(uid):,} coin**")
 
 @bot.command(name="claimmining")
 async def claim_mining(ctx):
-    uid=str(ctx.author.id)
-    mining=load_json(MINING_FILE,{})
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    mining = load_json(MINING_FILE, {})
     if uid not in mining:
-        return await ctx.send("❌ Tidak ada mining aktif")
-    info=mining[uid]
+        return await ctx.send("❌ Tidak ada mining aktif. Mulai dengan `!mining <1/2/3>`.")
+    info = mining[uid]
     if datetime.datetime.utcnow().timestamp() < info["finish"]:
-        return await ctx.send("⏳ Mining belum selesai")
-    level=info["level"]
-    data=MINING_LEVELS[level]
-    if random.randint(1,100) <= 40:
-        add_coins(uid,data["cost"])
-        msg="❌ Mining gagal, modal dikembalikan"
+        sisa = info["finish"] - datetime.datetime.utcnow().timestamp()
+        h, r = divmod(int(sisa), 3600)
+        m, s = divmod(r, 60)
+        return await ctx.send(f"⏳ Mining belum selesai! Selesai dalam **{h}j {m}m {s}d**.")
+    level = info["level"]
+    data = MINING_LEVELS[level]
+    if random.randint(1, 100) <= 40:
+        add_coins(uid, data["cost"])
+        msg = f"❌ Mining gagal, modal **{data['cost']} coin** dikembalikan | Saldo: **{get_coins(uid):,} coin**"
     else:
-        add_coins(uid,int(data["reward"]))
-        msg=f"✅ Mining berhasil, mendapat {data['reward']} coin"
+        reward = int(data["reward"])
+        add_coins(uid, reward)
+        msg = f"✅ Mining berhasil! Mendapat **{reward} coin** | Saldo: **{get_coins(uid):,} coin**"
     del mining[uid]
-    save_json(MINING_FILE,mining)
+    save_json(MINING_FILE, mining)
     await ctx.send(msg)
 
 @bot.command(name="trade")
 async def trade_cmd(ctx, direction:str=None, amount:int=None):
-    if direction not in ["up","down","naik","turun"]:
-        return await ctx.send("Gunakan !trade up/down 5")
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
+    if direction not in ["up", "down", "naik", "turun"]:
+        return await ctx.send("Gunakan `!trade up/down <5-10>` | Contoh: `!trade up 5`")
     if not amount or amount < 5 or amount > 10:
-        return await ctx.send("Min 5 max 10 coin")
-    uid=str(ctx.author.id)
-    if get_coins(uid) < amount:
-        return await ctx.send("❌ Coin tidak cukup")
-    add_coins(uid,-amount)
-    start=load_price()["price"]
-    await ctx.send("📈 Trade dimulai 1 menit...")
+        return await ctx.send("❌ Jumlah taruhan min **5** dan max **10** coin.")
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    balance = get_coins(uid)
+    if balance < amount:
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{amount:,} coin**.")
+    add_coins(uid, -amount)
+    start = load_price()["price"]
+    await ctx.send(f"📈 Trade dimulai! Taruhan **{amount} coin** | Harga awal: **Rp{start:,}** | Hasil dalam 1 menit...")
     await asyncio.sleep(60)
-    end=update_market_price()
-    result_up=end > start
-    pick_up=direction in ["up","naik"]
+    end = update_market_price()
+    result_up = end > start
+    pick_up = direction in ["up", "naik"]
     if result_up == pick_up:
-        reward=amount*2
-        add_coins(uid,reward)
-        await ctx.send(f"✅ Trade WIN! Harga {start}->{end}, reward {reward} coin")
+        reward = amount * 2
+        add_coins(uid, reward)
+        await ctx.send(f"✅ Trade **WIN**! Harga {start:,} → {end:,} | Reward: **{reward} coin** | Saldo: **{get_coins(uid):,} coin**")
     else:
         burn_coins(amount)
-        await ctx.send(f"❌ Trade LOSE! Harga {start}->{end}")
+        await ctx.send(f"❌ Trade **LOSE**! Harga {start:,} → {end:,} | Saldo: **{get_coins(uid):,} coin**")
 
 
 # ═══════════════════════════════════════════════════════
