@@ -1,4 +1,3 @@
-<FILE file_path="/home/workdir/attachments/bot.py" size="125800 bytes">
 import discord
 from discord.ext import commands, tasks
 from discord.ui import Button, View, Select
