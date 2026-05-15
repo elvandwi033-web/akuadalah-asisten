@@ -1,3 +1,4 @@
+<FILE file_path="/home/workdir/attachments/bot.py" size="125800 bytes">
 import discord
 from discord.ext import commands, tasks
 from discord.ui import Button, View, Select
@@ -32,11 +33,10 @@ QUOTE_FILE       = "quotes.json"
 SETTINGS_FILE    = "settings.json"
 AFK_FILE         = "afk.json"
 BANNER_FILE      = "banners.json"
-BCASH_FILE       = "bcash.json"
-INVENTORY_FILE   = "inventory.json"
 CUSTOM_CMD_FILE  = "custom_commands.json"
-DEPOSIT_FILE     = "deposits.json"
-CONVERT_FILE     = "converts.json"
+COIN_FILE        = "coins.json"
+MARKET_FILE      = "market.json"
+INVENTORY_FILE   = "inventory.json"
 
 # ═══════════════════════════════════════════════════════
 #  LEVEL CONFIG
@@ -1624,8 +1624,10 @@ async def help_cmd(ctx):
     embed = discord.Embed(title="📖 Asisten Lurah BFL — Command List", color=discord.Color.blue())
     embed.add_field(name="🏅 Level & Banner (di #spam)",
         value="`!rank [@user]`\n`!leaderboard`\n`!mybanner`", inline=False)
-    embed.add_field(name="💰 BFcash Economy",
-        value="`!bcash [@user]` — Cek saldo\n`!daily` — Reward harian\n`!topcash` — Leaderboard\n`!hunt` · `!fish` · `!battle` · `!slots` · `!flip` · `!roulette`\n`!transfer @user <jumlah>`\n`!deposit` · `!convert` (via DM)\n`!helpcash` — Panduan lengkap", inline=False)
+    embed.add_field(name="🪙 Coin System",
+        value="`!koin [@user]` — Cek saldo coin\n`!givecoin @user <jumlah>` — Admin beri coin\n💱 **100 Coin = Rp 10.000**\nTukar coin ke IDR via `!convertcoin` (min. 100 coin)", inline=False)
+    embed.add_field(name="🛒 Market System",
+        value="`!market` / `!shop` — Lihat katalog\n`!buy <item_id>` — Beli barang\n`!inventory` / `!inv` — Lihat barang kamu\n`!additem` — Admin tambah item (via DM)", inline=False)
     embed.add_field(name="🎙️ Voice Room",
         value="`!createroom [nama]`", inline=False)
     embed.add_field(name="📋 Verifikasi",
@@ -1647,8 +1649,10 @@ async def help_admin_cmd(ctx):
         value="`!warn @user [alasan]` — Beri peringatan (auto-kick di 3x)\n`!warnlist @user` — Lihat daftar warn\n`!clearwarn @user` — Hapus semua warn\n`!timeout @user <menit> [alasan]` — Timeout\n`!ban @user [alasan]` — Ban member\n`!unban <user_id>` — Unban member\n`!clear [n]` — Hapus n pesan", inline=False)
     embed.add_field(name="🎭 Role Management",
         value="`!addrole @user <nama_role>` — Tambah role\n`!removerole @user <nama_role>` — Hapus role", inline=False)
-    embed.add_field(name="💰 BFcash Admin",
-        value="`!givecash @user <jumlah>` — Tambah BFcash\n`!removecash @user <jumlah>` — Kurangi BFcash", inline=False)
+    embed.add_field(name="🪙 Coin Admin",
+        value="`!givecoin @user <jumlah>` — Tambah coin", inline=False)
+    embed.add_field(name="🛒 Market Admin",
+        value="`!additem` (via DM bot) — Tambah item + foto katalog", inline=False)
     embed.add_field(name="🎬 YouTube Database",
         value="`!addyt <nama> <link>` — Tambah video\n`!removeyt <nama>` — Hapus video", inline=False)
     embed.add_field(name="🎉 Giveaway (via DM bot)",
@@ -1659,709 +1663,243 @@ async def help_admin_cmd(ctx):
         value="`!setupticket` — Pasang panel ticket di channel", inline=False)
     embed.set_footer(text="Asisten Lurah BFL • Hanya terlihat oleh Admin/Owner")
     await ctx.send(embed=embed)
+
 # ═══════════════════════════════════════════════════════
-#  BFCASH — ECONOMY SYSTEM
+#  COIN SYSTEM (menggantikan BFcash)
 # ═══════════════════════════════════════════════════════
-BCASH_WELCOME      = 50_000          # Join reward
-BCASH_TO_IDR       = 5_000 / 1_000_000  # 1jt BFcash = 5rb IDR
-MIN_CONVERT        = 1_000_000       # Min convert 1jt BFcash
-DAILY_BASE         = 500             # Base daily reward
-DAILY_STREAK_BONUS = 100             # Bonus per hari streak
-DAILY_MAX_STREAK   = 30              # Streak maks 30 hari
+def load_coins():
+    return load_json(COIN_FILE, default={})
 
-# Hunt items: (nama, weight, min_cash, max_cash)
-HUNT_DROPS = [
-    ("🐇 Kelinci",     30, 200,  800),
-    ("🦊 Rubah",       22, 500,  1500),
-    ("🐗 Babi Hutan",  18, 800,  2500),
-    ("🦁 Singa",       12, 2000, 5000),
-    ("🐉 Naga",         5, 8000, 20000),
-    ("⚡ Petir",        2, 20000,50000),
-    ("💀 MISS",        11, 0,    0),
-]
-FISH_DROPS = [
-    ("🐟 Ikan Kecil",  35, 100,  400),
-    ("🐠 Ikan Hias",   25, 300,  900),
-    ("🐡 Ikan Besar",  20, 600,  1800),
-    ("🦑 Cumi Raksasa",12, 2000, 6000),
-    ("🐋 Paus Langka",  3, 15000,40000),
-    ("💀 GAGAL",        5, 0,    0),
-]
-BATTLE_MONSTERS = [
-    ("🐀 Tikus Got",   50, 200,   300,   0.70),
-    ("🐍 Ular Kobra",  80, 400,   800,   0.60),
-    ("🦂 Kalajengking",120, 800,  1500,  0.55),
-    ("🧟 Zombie",      150, 1500, 3000,  0.50),
-    ("🐲 Naga Api",    200, 5000, 12000, 0.40),
-    ("👹 Boss Iblis",  300, 15000,35000, 0.30),
-]
-SLOT_SYMS  = ["🍒","🍋","🍊","🍇","💎","⭐","🎰"]
-SLOT_MULTS = {"🍒":1.5,"🍋":2.0,"🍊":2.5,"🍇":3.0,"⭐":5.0,"💎":10.0,"🎰":20.0}
-CD = {"hunt":30,"fish":45,"battle":60,"slots":10,"rob":120,"flip":5}
-_cooldowns: dict = {}
+def save_coins(d):
+    save_json(COIN_FILE, d)
 
-def cd_check(action: str, uid: str) -> float:
-    now  = datetime.datetime.utcnow().timestamp()
-    last = _cooldowns.get(action, {}).get(uid, 0)
-    return max((last + CD[action]) - now, 0)
+def get_coins(uid: str) -> int:
+    coins = load_coins()
+    return coins.get(uid, 0)
 
-def cd_set(action: str, uid: str):
-    _cooldowns.setdefault(action, {})[uid] = datetime.datetime.utcnow().timestamp()
+def add_coins(uid: str, amount: int) -> int:
+    coins = load_coins()
+    current = coins.get(uid, 0)
+    coins[uid] = max(0, current + amount)
+    save_coins(coins)
+    return coins[uid]
 
-def load_bcash():     return load_json(BCASH_FILE)
-def save_bcash(d):    save_json(BCASH_FILE, d)
-def load_deposits():  return load_json(DEPOSIT_FILE)
-def save_deposits(d): save_json(DEPOSIT_FILE, d)
-def load_converts():  return load_json(CONVERT_FILE)
-def save_converts(d): save_json(CONVERT_FILE, d)
+def ensure_coins(uid: str):
+    coins = load_coins()
+    if uid not in coins:
+        coins[uid] = 0
+        save_coins(coins)
 
-def get_cash(uid: str) -> int:
-    return load_bcash().get(uid, {}).get("cash", 0)
-
-def add_cash(uid: str, amount: int) -> int:
-    bc = load_bcash()
-    if uid not in bc:
-        bc[uid] = {"cash":0,"total_earned":0,"daily_streak":0,"last_daily":None}
-    bc[uid]["cash"] = max(0, bc[uid].get("cash", 0) + amount)
-    if amount > 0:
-        bc[uid]["total_earned"] = bc[uid].get("total_earned", 0) + amount
-    save_bcash(bc)
-    return bc[uid]["cash"]
-
-def ensure_user(uid: str):
-    bc = load_bcash()
-    if uid not in bc:
-        bc[uid] = {"cash":0,"total_earned":0,"daily_streak":0,"last_daily":None}
-        save_bcash(bc)
-
-def weighted_choice(drops):
-    items, weights = zip(*[(d, d[1]) for d in drops])
-    return random.choices(items, weights=weights)[0]
-
-# ─── ON MEMBER JOIN ───────────────────────────────────
-@bot.event
-async def on_member_join(member: discord.Member):
-    uid = str(member.id)
-    bc  = load_bcash()
-    if uid not in bc:
-        bc[uid] = {"cash":BCASH_WELCOME,"total_earned":BCASH_WELCOME,
-                   "daily_streak":0,"last_daily":None}
-        save_bcash(bc)
-        try:
-            embed = discord.Embed(
-                title="🎉 Selamat Datang di BFL!",
-                description=(
-                    f"Hei **{member.display_name}**!\n\n"
-                    f"💰 Bonus join: **{BCASH_WELCOME:,} BFcash**\n\n"
-                    "Gunakan `!bcash` untuk cek saldo.\n"
-                    "Mainkan `!hunt`, `!fish`, `!slots` untuk cari lebih banyak!"
-                ),
-                color=discord.Color.gold()
-            )
-            embed.set_footer(text="Asisten Lurah BFL • BFcash Economy")
-            await member.send(embed=embed)
-        except Exception:
-            pass
-
-# ─── BALANCE ─────────────────────────────────────────
-@bot.command(name="bcash", aliases=["bal","saldo","wallet"])
-async def bcash_balance(ctx, member: discord.Member = None):
+@bot.command(name="koin", aliases=["coins", "coin", "saldo"])
+async def coins_balance(ctx, member: discord.Member = None):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!", delete_after=5)
+        return
     member = member or ctx.author
-    uid    = str(member.id)
-    ensure_user(uid)
-    data   = load_bcash().get(uid, {})
-    cash   = data.get("cash", 0)
-    total  = data.get("total_earned", 0)
-    streak = data.get("daily_streak", 0)
-    embed  = discord.Embed(title=f"💰 Dompet BFcash — {member.display_name}", color=discord.Color.gold())
-    embed.add_field(name="💵 Saldo",        value=f"{cash:,} BFcash", inline=True)
-    embed.add_field(name="💱 Nilai IDR",    value=f"Rp {int(cash*BCASH_TO_IDR):,}", inline=True)
-    embed.add_field(name="📈 Total Earned", value=f"{total:,} BFcash", inline=True)
-    embed.add_field(name="🔥 Daily Streak", value=f"{streak} hari", inline=True)
+    uid = str(member.id)
+    ensure_coins(uid)
+    balance = get_coins(uid)
+    embed = discord.Embed(title=f"🪙 Dompet Coin — {member.display_name}", color=discord.Color.gold())
+    embed.add_field(name="🪙 Saldo", value=f"{balance:,} Coin", inline=True)
+    embed.add_field(name="💱 Nilai IDR", value="100 Coin = Rp 10.000", inline=True)
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text="Asisten Lurah BFL • BFcash Economy")
+    embed.set_footer(text="Asisten Lurah BFL • Coin System")
     await ctx.send(embed=embed)
 
-# ─── DAILY REWARD ────────────────────────────────────
-@bot.command(name="daily")
-async def daily_cmd(ctx):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid  = str(ctx.author.id)
-    ensure_user(uid)
-    bc   = load_bcash()
-    data = bc[uid]
-    now  = datetime.datetime.now(WIB).date()
-    last = data.get("last_daily")
-    if last:
-        last_date = datetime.date.fromisoformat(last)
-        delta = (now - last_date).days
-        if delta == 0:
-            tomorrow = datetime.datetime.now(WIB).replace(hour=0,minute=0,second=0,microsecond=0) + datetime.timedelta(days=1)
-            sisa = tomorrow - datetime.datetime.now(WIB)
-            h, rem = divmod(int(sisa.total_seconds()), 3600)
-            m, s   = divmod(rem, 60)
-            await ctx.send(f"⏳ {ctx.author.mention} Sudah claim hari ini! Kembali dalam **{h}j {m}m {s}d**.")
-            return
-        elif delta == 1:
-            data["daily_streak"] = min(data.get("daily_streak", 0) + 1, DAILY_MAX_STREAK)
-        else:
-            data["daily_streak"] = 1
-    else:
-        data["daily_streak"] = 1
-    streak = data["daily_streak"]
-    reward = DAILY_BASE + (streak - 1) * DAILY_STREAK_BONUS
-    bonus, bonus_msg = 0, ""
-    if streak % 7 == 0:
-        bonus     = reward * 2
-        bonus_msg = f"\n🎁 **BONUS STREAK {streak} HARI:** +{bonus:,} BFcash!"
-    total_reward = reward + bonus
-    data["last_daily"]   = now.isoformat()
-    data["cash"]         = data.get("cash", 0) + total_reward
-    data["total_earned"] = data.get("total_earned", 0) + total_reward
-    bc[uid] = data
-    save_bcash(bc)
-    embed = discord.Embed(
-        title="📅 Daily Reward!",
-        description=(
-            f"{ctx.author.mention} berhasil claim daily!\n\n"
-            f"💰 **+{total_reward:,} BFcash**{bonus_msg}\n"
-            f"🔥 Streak: **{streak} hari**\n\n"
-            "💡 Streak konsisten = reward makin besar!\n"
-            "Gunakan `!bcash` untuk cek saldo."
-        ),
-        color=discord.Color.green()
-    )
-    embed.set_footer(text="Asisten Lurah BFL • Kembali besok untuk streak!")
-    await ctx.send(embed=embed)
-
-# ─── HUNT ────────────────────────────────────────────
-@bot.command(name="hunt", aliases=["berburu"])
-async def hunt_cmd(ctx):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    cd = cd_check("hunt", uid)
-    if cd > 0:
-        await ctx.send(f"⏳ {ctx.author.mention} Cooldown **{cd:.0f}d** lagi!", delete_after=5)
-        return
-    cd_set("hunt", uid)
-    drop = weighted_choice(HUNT_DROPS)
-    name, _, min_c, max_c = drop
-    if min_c == 0:
-        embed = discord.Embed(title="🏹 Berburu", description=f"{ctx.author.mention} **MISS!** Buruanmu kabur! 💨", color=discord.Color.red())
-    else:
-        earned = random.randint(min_c, max_c)
-        add_cash(uid, earned)
-        embed = discord.Embed(title="🏹 Berburu", description=f"{ctx.author.mention} menangkap {name}!\n\n💰 +**{earned:,} BFcash**", color=discord.Color.green())
-    embed.set_footer(text=f"Cooldown: {CD['hunt']}d • Asisten Lurah BFL")
-    await ctx.send(embed=embed)
-
-# ─── FISH ────────────────────────────────────────────
-@bot.command(name="fish", aliases=["mancing"])
-async def fish_cmd(ctx):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    cd = cd_check("fish", uid)
-    if cd > 0:
-        await ctx.send(f"⏳ {ctx.author.mention} Cooldown **{cd:.0f}d** lagi!", delete_after=5)
-        return
-    cd_set("fish", uid)
-    drop = weighted_choice(FISH_DROPS)
-    name, _, min_c, max_c = drop
-    if min_c == 0:
-        embed = discord.Embed(title="🎣 Mancing", description=f"{ctx.author.mention} **Tidak dapat ikan!** Coba lagi~", color=discord.Color.red())
-    else:
-        earned = random.randint(min_c, max_c)
-        add_cash(uid, earned)
-        embed = discord.Embed(title="🎣 Mancing", description=f"{ctx.author.mention} dapat {name}!\n\n💰 +**{earned:,} BFcash**", color=discord.Color.blue())
-    embed.set_footer(text=f"Cooldown: {CD['fish']}d • Asisten Lurah BFL")
-    await ctx.send(embed=embed)
-
-# ─── BATTLE ──────────────────────────────────────────
-@bot.command(name="battle", aliases=["fight","lawan"])
-async def battle_cmd(ctx):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    cd = cd_check("battle", uid)
-    if cd > 0:
-        await ctx.send(f"⏳ {ctx.author.mention} Cooldown **{cd:.0f}d** lagi!", delete_after=5)
-        return
-    cd_set("battle", uid)
-    monster = random.choice(BATTLE_MONSTERS)
-    name, cost, min_r, max_r, win_chance = monster
-    cash = get_cash(uid)
-    if cash < cost:
-        await ctx.send(f"❌ {ctx.author.mention} BFcash kurang! Butuh **{cost:,}** untuk battle {name}.")
-        return
-    if random.random() < win_chance:
-        earned = random.randint(min_r, max_r)
-        add_cash(uid, earned)
-        embed = discord.Embed(title="⚔️ Battle — MENANG!", description=f"{ctx.author.mention} mengalahkan **{name}**!\n\n💰 +**{earned:,} BFcash**", color=discord.Color.green())
-    else:
-        add_cash(uid, -cost)
-        embed = discord.Embed(title="⚔️ Battle — KALAH!", description=f"{ctx.author.mention} dikalahkan **{name}**!\n\n💸 -**{cost:,} BFcash**", color=discord.Color.red())
-    embed.set_footer(text=f"Cooldown: {CD['battle']}d • Asisten Lurah BFL")
-    await ctx.send(embed=embed)
-
-# ─── SLOTS ───────────────────────────────────────────
-@bot.command(name="slots", aliases=["slot","mesin"])
-async def slots_cmd(ctx, bet: str = None):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    if not bet:
-        await ctx.send("❌ Contoh: `!slots 1000` atau `!slots all`")
-        return
-    cash = get_cash(uid)
-    amount = cash if bet.lower() == "all" else int(bet.replace(".","").replace(",","")) if bet.replace(".","").replace(",","").isdigit() else None
-    if amount is None or amount <= 0:
-        await ctx.send("❌ Bet tidak valid.")
-        return
-    if amount > cash:
-        await ctx.send(f"❌ BFcash tidak cukup!")
-        return
-    cd = cd_check("slots", uid)
-    if cd > 0:
-        await ctx.send(f"⏳ Cooldown **{cd:.0f}d** lagi!", delete_after=5)
-        return
-    cd_set("slots", uid)
-    reels = [random.choice(SLOT_SYMS) for _ in range(3)]
-    line  = " | ".join(reels)
-    if reels[0] == reels[1] == reels[2]:
-        mult   = SLOT_MULTS[reels[0]]
-        profit = int(amount * mult) - amount
-        add_cash(uid, profit)
-        embed = discord.Embed(title="🎰 JACKPOT!!!", description=f"[ {line} ]\n\n{ctx.author.mention} **JACKPOT x{mult}!**\n\n💰 +**{profit:,} BFcash**", color=discord.Color.gold())
-    elif reels[0] == reels[1] or reels[1] == reels[2]:
-        profit = int(amount * 0.2)
-        add_cash(uid, profit)
-        embed = discord.Embed(title="🎰 Dua Sama!", description=f"[ {line} ]\n\n{ctx.author.mention} Dua simbol sama! +20%\n\n💰 +**{profit:,} BFcash**", color=discord.Color.blue())
-    else:
-        add_cash(uid, -amount)
-        embed = discord.Embed(title="🎰 Tidak Beruntung", description=f"[ {line} ]\n\n{ctx.author.mention} Tidak ada yang sama.\n\n💸 -**{amount:,} BFcash**", color=discord.Color.red())
-    embed.set_footer(text="Asisten Lurah BFL • Slots")
-    await ctx.send(embed=embed)
-
-# ─── FLIP COIN ───────────────────────────────────────
-@bot.command(name="flip", aliases=["coinflip","koin"])
-async def flip_cmd(ctx, pilihan: str = None, bet: str = None):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    valid_choices = ["heads","tails","h","t","angka","gambar"]
-    if not pilihan or pilihan.lower() not in valid_choices:
-        await ctx.send("❌ Contoh: `!flip heads 1000` atau `!flip tails all`")
-        return
-    cash = get_cash(uid)
-    if not bet:
-        await ctx.send("❌ Masukkan jumlah bet.")
-        return
-    amount = cash if bet.lower() == "all" else int(bet.replace(".","").replace(",","")) if bet.replace(".","").replace(",","").isdigit() else None
-    if amount is None or amount <= 0 or amount > cash:
-        await ctx.send(f"❌ BFcash tidak cukup!")
-        return
-    cd = cd_check("flip", uid)
-    if cd > 0:
-        await ctx.send(f"⏳ Cooldown **{cd:.0f}d**!", delete_after=5)
-        return
-    cd_set("flip", uid)
-    chosen = "heads" if pilihan.lower() in ["heads","h","angka"] else "tails"
-    result = random.choice(["heads","tails"])
-    result_em = "🪙 HEADS (Angka)" if result == "heads" else "🌀 TAILS (Gambar)"
-    if chosen == result:
-        add_cash(uid, amount)
-        embed = discord.Embed(title="🪙 Coin Flip — MENANG!", description=f"Hasil: **{result_em}**\n\n{ctx.author.mention} tebak benar!\n💰 +**{amount:,} BFcash**", color=discord.Color.green())
-    else:
-        add_cash(uid, -amount)
-        embed = discord.Embed(title="🪙 Coin Flip — KALAH!", description=f"Hasil: **{result_em}**\n\n{ctx.author.mention} tebakan salah!\n💸 -**{amount:,} BFcash**", color=discord.Color.red())
-    embed.set_footer(text="Asisten Lurah BFL • Coin Flip")
-    await ctx.send(embed=embed)
-
-# ─── ROULETTE ────────────────────────────────────────
-@bot.command(name="roulette", aliases=["rolet"])
-async def roulette_cmd(ctx, pilihan: str = None, bet: str = None):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    if not pilihan or pilihan.lower() not in ["merah","hitam","hijau","red","black","green"]:
-        await ctx.send("❌ Pilih: `merah`(2x) / `hitam`(2x) / `hijau`(14x)\nContoh: `!roulette merah 5000`")
-        return
-    cash = get_cash(uid)
-    if not bet:
-        await ctx.send("❌ Masukkan jumlah bet.")
-        return
-    amount = cash if bet.lower() == "all" else int(bet.replace(".","").replace(",","")) if bet.replace(".","").replace(",","").isdigit() else None
-    if amount is None or amount <= 0 or amount > cash:
-        await ctx.send(f"❌ BFcash tidak cukup!")
-        return
-    chosen = pilihan.lower().replace("red","merah").replace("black","hitam").replace("green","hijau")
-    wheel  = ["merah"]*18 + ["hitam"]*18 + ["hijau"]*2
-    result = random.choice(wheel)
-    em_map = {"merah":"🔴","hitam":"⚫","hijau":"🟢"}
-    mults  = {"merah":2,"hitam":2,"hijau":14}
-    if chosen == result:
-        profit = amount * (mults[result] - 1)
-        add_cash(uid, profit)
-        embed = discord.Embed(title=f"🎡 Roulette — {em_map[result]} {result.upper()} — MENANG!", description=f"{ctx.author.mention} menang x{mults[result]}!\n\n💰 +**{profit:,} BFcash**", color=discord.Color.green())
-    else:
-        add_cash(uid, -amount)
-        embed = discord.Embed(title=f"🎡 Roulette — {em_map[result]} {result.upper()} — KALAH!", description=f"{ctx.author.mention} kalah!\n\n💸 -**{amount:,} BFcash**", color=discord.Color.red())
-    embed.set_footer(text="Asisten Lurah BFL • Roulette")
-    await ctx.send(embed=embed)
-
-# ─── ROB ─────────────────────────────────────────────
-@bot.command(name="rob", aliases=["rampok","curi"])
-async def rob_cmd(ctx, target: discord.Member = None):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    if not target or target.bot or target.id == ctx.author.id:
-        await ctx.send("❌ Pilih target valid. Contoh: `!rob @user`")
-        return
-    tid = str(target.id)
-    ensure_user(tid)
-    cd = cd_check("rob", uid)
-    if cd > 0:
-        await ctx.send(f"⏳ Cooldown **{cd:.0f}d** lagi!", delete_after=5)
-        return
-    target_cash = get_cash(tid)
-    my_cash     = get_cash(uid)
-    if target_cash < 1000:
-        await ctx.send(f"❌ {target.display_name} terlalu miskin untuk dirampok!")
-        return
-    if my_cash < 500:
-        await ctx.send("❌ Kamu butuh minimal **500 BFcash** untuk merampok!")
-        return
-    cd_set("rob", uid)
-    if random.random() < 0.45:
-        stolen = max(500, random.randint(int(target_cash*0.05), int(target_cash*0.25)))
-        add_cash(uid, stolen)
-        add_cash(tid, -stolen)
-        embed = discord.Embed(title="🦹 Perampokan BERHASIL!", description=f"{ctx.author.mention} merampok {target.mention}!\n\n💰 +**{stolen:,} BFcash**", color=discord.Color.green())
-    else:
-        fine = random.randint(500, min(2000, my_cash))
-        add_cash(uid, -fine)
-        embed = discord.Embed(title="🚔 Perampokan GAGAL!", description=f"{ctx.author.mention} ketahuan polisi!\n\n💸 Denda **{fine:,} BFcash**", color=discord.Color.red())
-    embed.set_footer(text=f"Cooldown: {CD['rob']}d • Asisten Lurah BFL")
-    await ctx.send(embed=embed)
-
-# ─── TRANSFER ────────────────────────────────────────
-@bot.command(name="transfer", aliases=["kirim","send"])
-async def transfer_cmd(ctx, target: discord.Member = None, amount: str = None):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    uid = str(ctx.author.id)
-    ensure_user(uid)
-    if not target or target.bot or target.id == ctx.author.id:
-        await ctx.send("❌ Target tidak valid. Contoh: `!transfer @user 10000`")
-        return
-    if not amount or not amount.replace(".","").replace(",","").isdigit():
-        await ctx.send("❌ Masukkan jumlah. Contoh: `!transfer @user 10000`")
-        return
-    amt  = int(amount.replace(".","").replace(",",""))
-    cash = get_cash(uid)
-    if amt <= 0 or amt > cash:
-        await ctx.send(f"❌ BFcash tidak cukup!")
-        return
-    tid = str(target.id)
-    ensure_user(tid)
-    add_cash(uid, -amt)
-    add_cash(tid, amt)
-    embed = discord.Embed(title="💸 Transfer Berhasil", description=f"{ctx.author.mention} → {target.mention}\n\n💰 **{amt:,} BFcash**", color=discord.Color.green())
-    embed.set_footer(text="Asisten Lurah BFL • BFcash Transfer")
-    await ctx.send(embed=embed)
-
-# ─── LEADERBOARD CASH ────────────────────────────────
-@bot.command(name="topcash", aliases=["richlist","kaya"])
-async def top_cash(ctx):
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx), delete_after=8)
-        return
-    bc = load_bcash()
-    sorted_users = sorted(bc.items(), key=lambda x: x[1].get("cash",0), reverse=True)[:10]
-    medals = ["🥇","🥈","🥉"]
-    embed  = discord.Embed(title="🏆 Top 10 Terkaya — BFcash", color=discord.Color.gold())
-    for i, (uid, data) in enumerate(sorted_users):
-        try:
-            user = await bot.fetch_user(int(uid))
-            name = user.display_name
-        except Exception:
-            name = f"User#{uid}"
-        cash  = data.get("cash", 0)
-        medal = medals[i] if i < 3 else f"#{i+1}"
-        embed.add_field(name=f"{medal} {name}", value=f"💰 {cash:,} BFcash  |  💱 Rp {int(cash*BCASH_TO_IDR):,}", inline=False)
-    embed.set_footer(text="Asisten Lurah BFL • BFcash Leaderboard")
-    await ctx.send(embed=embed)
-
-# ─── DEPOSIT ─────────────────────────────────────────
-class DepositConfirmView(View):
-    def __init__(self, deposit_id: str):
-        super().__init__(timeout=None)
-        self.deposit_id = deposit_id
-
-    @discord.ui.button(label="✅ ACC Deposit", style=discord.ButtonStyle.success)
-    async def acc_deposit(self, interaction: discord.Interaction, button: Button):
-        if not is_admin(interaction.user):
-            await interaction.response.send_message("❌ Hanya admin.", ephemeral=True)
-            return
-        deps = load_deposits()
-        dep  = deps.get(self.deposit_id)
-        if not dep or dep.get("status") != "pending":
-            await interaction.response.send_message("⚠️ Deposit sudah diproses.", ephemeral=True)
-            return
-        uid    = dep["user_id"]
-        amount = dep["bcash"]
-        add_cash(uid, amount)
-        dep["status"] = "approved"
-        save_deposits(deps)
-        try:
-            user = await bot.fetch_user(int(uid))
-            await user.send(f"✅ **Deposit disetujui!**\n💰 +**{amount:,} BFcash** masuk ke dompet!\nGunakan `!bcash` untuk cek saldo terbaru.")
-        except Exception:
-            pass
-        await interaction.response.edit_message(content=f"✅ Deposit **{amount:,} BFcash** untuk <@{uid}> disetujui oleh {interaction.user.mention}.", view=None)
-
-    @discord.ui.button(label="❌ Tolak", style=discord.ButtonStyle.danger)
-    async def reject_deposit(self, interaction: discord.Interaction, button: Button):
-        if not is_admin(interaction.user):
-            await interaction.response.send_message("❌ Hanya admin.", ephemeral=True)
-            return
-        deps = load_deposits()
-        dep  = deps.get(self.deposit_id)
-        if not dep or dep.get("status") != "pending":
-            await interaction.response.send_message("⚠️ Deposit sudah diproses.", ephemeral=True)
-            return
-        uid = dep["user_id"]
-        dep["status"] = "rejected"
-        save_deposits(deps)
-        try:
-            user = await bot.fetch_user(int(uid))
-            await user.send("❌ **Deposit ditolak.** Hubungi admin untuk info lebih lanjut.")
-        except Exception:
-            pass
-        await interaction.response.edit_message(content=f"❌ Deposit untuk <@{uid}> ditolak oleh {interaction.user.mention}.", view=None)
-
-@bot.command(name="deposit")
-async def deposit_cmd(ctx, amount: str = None):
-    if isinstance(ctx.channel, discord.DMChannel):
-        if not amount:
-            await ctx.send(
-                "💳 **Cara Deposit BFcash:**\n"
-                "Ketik `!deposit <jumlah_idr>` (min. Rp 1.000)\n\n"
-                "📌 **Rate:** Rp 1.000 = **200.000 BFcash**\n"
-                "Contoh: `!deposit 5000` → dapat 1.000.000 BFcash"
-            )
-            return
-        if not amount.replace(".", "").replace(",", "").isdigit():
-            await ctx.send("❌ Jumlah tidak valid.")
-            return
-        idr_amount = int(amount.replace(".","").replace(",",""))
-        if idr_amount < 1000:
-            await ctx.send("❌ Minimal deposit **Rp 1.000**")
-            return
-        bcash_amount = int(idr_amount / BCASH_TO_IDR)
-        await ctx.send(
-            f"💳 **Konfirmasi Deposit**\n\n"
-            f"💵 IDR: **Rp {idr_amount:,}**\n"
-            f"💰 BFcash: **{bcash_amount:,} BFcash**\n\n"
-            "Kirim **bukti transfer** (foto/screenshot) sekarang.\nTimeout: **5 menit**"
-        )
-        def check_proof(m):
-            return m.author.id == ctx.author.id and isinstance(m.channel, discord.DMChannel) and m.attachments
-        try:
-            proof_msg = await bot.wait_for("message", check=check_proof, timeout=300)
-        except asyncio.TimeoutError:
-            await ctx.send("⏰ Timeout. Ulangi `!deposit`")
-            return
-        dep_id = f"dep_{ctx.author.id}_{int(datetime.datetime.utcnow().timestamp())}"
-        deps   = load_deposits()
-        deps[dep_id] = {"user_id":str(ctx.author.id),"idr":idr_amount,"bcash":bcash_amount,"status":"pending","created_at":str(datetime.datetime.utcnow())}
-        save_deposits(deps)
-        owner = await bot.fetch_user(OWNER_ID)
-        files = [await att.to_file() for att in proof_msg.attachments if att.content_type and att.content_type.startswith("image")]
-        embed = discord.Embed(title="💳 DEPOSIT MASUK", description=f"**User:** {ctx.author} (`{ctx.author.id}`)\n**IDR:** Rp {idr_amount:,}\n**BFcash:** {bcash_amount:,} BFcash\n**ID:** `{dep_id}`", color=discord.Color.orange(), timestamp=datetime.datetime.utcnow())
-        await owner.send(embed=embed, files=files, view=DepositConfirmView(dep_id))
-        await ctx.send("✅ **Bukti deposit terkirim!**\nTunggu konfirmasi admin. BFcash akan masuk otomatis setelah disetujui.")
-        return
-    await ctx.send(f"{ctx.author.mention} Ketik `!deposit` di **DM bot** untuk deposit! 📩", delete_after=10)
-    try:
-        await ctx.author.send("💳 **Deposit BFcash:**\nKetik `!deposit <jumlah_idr>` di sini.\nContoh: `!deposit 5000` → 1.000.000 BFcash\n📌 Rate: Rp 1.000 = 200.000 BFcash")
-    except discord.Forbidden:
-        pass
-
-# ─── CONVERT BFcash → IDR ────────────────────────────
-class ConvertConfirmView(View):
-    def __init__(self, convert_id: str):
-        super().__init__(timeout=None)
-        self.convert_id = convert_id
-
-    @discord.ui.button(label="✅ ACC & Transfer IDR", style=discord.ButtonStyle.success)
-    async def acc_convert(self, interaction: discord.Interaction, button: Button):
-        if not is_admin(interaction.user):
-            await interaction.response.send_message("❌ Hanya admin.", ephemeral=True)
-            return
-        convs = load_converts()
-        conv  = convs.get(self.convert_id)
-        if not conv or conv.get("status") != "pending":
-            await interaction.response.send_message("⚠️ Sudah diproses.", ephemeral=True)
-            return
-        uid   = conv["user_id"]
-        bcash = conv["bcash"]
-        idr   = conv["idr"]
-        if get_cash(uid) < bcash:
-            await interaction.response.send_message(f"❌ BFcash user tidak cukup! Saldo: {get_cash(uid):,}", ephemeral=True)
-            return
-        add_cash(uid, -bcash)
-        conv["status"] = "approved"
-        save_converts(convs)
-        try:
-            user = await bot.fetch_user(int(uid))
-            await user.send(f"✅ **Convert disetujui!**\n💰 -{bcash:,} BFcash\n💵 +Rp {idr:,} (admin akan transfer)\nGunakan `!bcash` untuk cek saldo terbaru.")
-        except Exception:
-            pass
-        await interaction.response.edit_message(content=f"✅ Convert **{bcash:,} BFcash → Rp {idr:,}** untuk <@{uid}> disetujui.\n⚠️ **Jangan lupa transfer IDR ke user!**", view=None)
-
-    @discord.ui.button(label="❌ Tolak", style=discord.ButtonStyle.danger)
-    async def reject_convert(self, interaction: discord.Interaction, button: Button):
-        if not is_admin(interaction.user):
-            await interaction.response.send_message("❌ Hanya admin.", ephemeral=True)
-            return
-        convs = load_converts()
-        conv  = convs.get(self.convert_id)
-        if not conv or conv.get("status") != "pending":
-            await interaction.response.send_message("⚠️ Sudah diproses.", ephemeral=True)
-            return
-        uid = conv["user_id"]
-        conv["status"] = "rejected"
-        save_converts(convs)
-        try:
-            user = await bot.fetch_user(int(uid))
-            await user.send("❌ **Convert BFcash ditolak.** Hubungi admin untuk info lebih lanjut.")
-        except Exception:
-            pass
-        await interaction.response.edit_message(content=f"❌ Convert untuk <@{uid}> ditolak oleh {interaction.user.mention}.", view=None)
-
-@bot.command(name="convert", aliases=["tukar","cashout"])
-async def convert_cmd(ctx, amount: str = None):
-    if isinstance(ctx.channel, discord.DMChannel):
-        if not amount:
-            await ctx.send(
-                "💱 **Cara Convert BFcash → IDR:**\n"
-                "Ketik `!convert <jumlah_bfcash>` (min. 1.000.000 BFcash)\n\n"
-                f"📌 **Rate:** 1.000.000 BFcash = Rp 5.000\n"
-                "Contoh: `!convert 5000000` → Rp 25.000"
-            )
-            return
-        if not amount.replace(".","").replace(",","").isdigit():
-            await ctx.send("❌ Jumlah tidak valid.")
-            return
-        bcash_amount = int(amount.replace(".","").replace(",",""))
-        if bcash_amount < MIN_CONVERT:
-            await ctx.send(f"❌ Minimal convert **{MIN_CONVERT:,} BFcash** (Rp 5.000)")
-            return
-        uid  = str(ctx.author.id)
-        ensure_user(uid)
-        cash = get_cash(uid)
-        if cash < bcash_amount:
-            await ctx.send(f"❌ BFcash tidak cukup! Saldo: **{cash:,} BFcash**")
-            return
-        idr_amount = int(bcash_amount * BCASH_TO_IDR)
-        await ctx.send(
-            f"💱 **Konfirmasi Convert**\n\n"
-            f"💰 BFcash: **{bcash_amount:,} BFcash**\n"
-            f"💵 IDR: **Rp {idr_amount:,}**\n\n"
-            "Kirim info rekening (Bank, Nomor, Nama) sekarang.\nTimeout: **5 menit**"
-        )
-        def check_info(m):
-            return m.author.id == ctx.author.id and isinstance(m.channel, discord.DMChannel)
-        try:
-            info_msg = await bot.wait_for("message", check=check_info, timeout=300)
-        except asyncio.TimeoutError:
-            await ctx.send("⏰ Timeout. Ulangi `!convert`")
-            return
-        conv_id = f"conv_{ctx.author.id}_{int(datetime.datetime.utcnow().timestamp())}"
-        convs   = load_converts()
-        convs[conv_id] = {"user_id":str(ctx.author.id),"bcash":bcash_amount,"idr":idr_amount,"rekening":info_msg.content,"status":"pending","created_at":str(datetime.datetime.utcnow())}
-        save_converts(convs)
-        owner = await bot.fetch_user(OWNER_ID)
-        embed = discord.Embed(title="💱 CONVERT MASUK", description=f"**User:** {ctx.author} (`{ctx.author.id}`)\n**BFcash:** {bcash_amount:,} BFcash\n**IDR:** Rp {idr_amount:,}\n**Rekening:** {info_msg.content}\n**ID:** `{conv_id}`", color=discord.Color.purple(), timestamp=datetime.datetime.utcnow())
-        await owner.send(embed=embed, view=ConvertConfirmView(conv_id))
-        await ctx.send("✅ **Request convert terkirim!**\nAdmin akan review dan transfer IDR ke rekeningmu.\nBFcash akan dipotong setelah disetujui.")
-        return
-    await ctx.send(f"{ctx.author.mention} Ketik `!convert` di **DM bot**! 📩", delete_after=10)
-    try:
-        await ctx.author.send(f"💱 **Convert BFcash → IDR:**\nKetik `!convert <jumlah_bfcash>` di sini.\nMin. {MIN_CONVERT:,} BFcash = Rp 5.000\nContoh: `!convert 1000000`")
-    except discord.Forbidden:
-        pass
-
-# ─── ADMIN: GIVE / REMOVE CASH ───────────────────────
-@bot.command(name="givecash", aliases=["addcash"])
-async def give_cash(ctx, member: discord.Member = None, amount: str = None):
+@bot.command(name="givecoin")
+async def give_coin(ctx, member: discord.Member = None, amount: str = None):
     if not is_admin(ctx.author):
         await ctx.send("❌ Hanya admin.", delete_after=5)
         return
     if not member or not amount or not amount.replace(".", "").replace(",", "").isdigit():
-        await ctx.send("❌ Contoh: `!givecash @user 50000`")
+        await ctx.send("❌ Contoh: `!givecoin @user 100`")
         return
-    amt = int(amount.replace(".","").replace(",",""))
+    amt = int(amount.replace(".", "").replace(",", ""))
     uid = str(member.id)
-    ensure_user(uid)
-    add_cash(uid, amt)
-    await ctx.send(f"✅ **{amt:,} BFcash** diberikan ke {member.mention}. Saldo: **{get_cash(uid):,} BFcash**")
+    ensure_coins(uid)
+    new_balance = add_coins(uid, amt)
+    await ctx.send(f"✅ **{amt:,} Coin** diberikan ke {member.mention}. Saldo sekarang: **{new_balance:,} Coin**")
 
-@bot.command(name="removecash", aliases=["takecash"])
-async def remove_cash_cmd(ctx, member: discord.Member = None, amount: str = None):
-    if not is_admin(ctx.author):
-        await ctx.send("❌ Hanya admin.", delete_after=5)
+# ═══════════════════════════════════════════════════════
+#  MARKET SYSTEM
+# ═══════════════════════════════════════════════════════
+def load_market():
+    return load_json(MARKET_FILE, default={})
+
+def save_market(d):
+    save_json(MARKET_FILE, d)
+
+def load_inventory():
+    return load_json(INVENTORY_FILE, default={})
+
+def save_inventory(d):
+    save_json(INVENTORY_FILE, d)
+
+@bot.command(name="additem", aliases=["addmarket"])
+async def add_market_item(ctx):
+    """Admin setup item market via DM (nama, harga, deskripsi, foto katalog)"""
+    if not isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("⚠️ Command ini hanya via DM bot.", delete_after=5)
         return
-    if not member or not amount or not amount.replace(".","").replace(",","").isdigit():
-        await ctx.send("❌ Contoh: `!removecash @user 50000`")
+    if not is_admin(ctx.author) and ctx.author.id != OWNER_ID:
+        await ctx.send("❌ Hanya admin yang boleh setup market.", delete_after=5)
         return
-    amt = int(amount.replace(".","").replace(",",""))
+
+    await ctx.send("🛒 **Setup Item Market Baru**\n\n**1.** Ketik **nama item** (contoh: Kaos BFL Premium)")
+    
+    def check(m): 
+        return m.author.id == ctx.author.id and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        # Nama
+        name_msg = await bot.wait_for("message", check=check, timeout=180)
+        name = name_msg.content.strip()[:100]
+
+        await ctx.send("**2.** Ketik **harga dalam Coin** (contoh: 500)")
+        price_msg = await bot.wait_for("message", check=check, timeout=60)
+        if not price_msg.content.strip().isdigit():
+            await ctx.send("❌ Harga harus angka!")
+            return
+        price = int(price_msg.content.strip())
+
+        await ctx.send("**3.** Ketik **deskripsi item** (bisa panjang)")
+        desc_msg = await bot.wait_for("message", check=check, timeout=180)
+        description = desc_msg.content.strip()[:500]
+
+        await ctx.send("**4.** Kirim **foto katalog** (satu attachment gambar) sekarang.")
+        
+        def check_photo(m):
+            return (m.author.id == ctx.author.id and 
+                    isinstance(m.channel, discord.DMChannel) and 
+                    m.attachments and 
+                    m.attachments[0].content_type.startswith("image"))
+        
+        photo_msg = await bot.wait_for("message", check=check_photo, timeout=300)
+        image_url = photo_msg.attachments[0].url
+
+        # Simpan ke market
+        market = load_market()
+        item_id = f"item_{int(datetime.datetime.utcnow().timestamp())}"
+        market[item_id] = {
+            "name": name,
+            "price": price,
+            "description": description,
+            "image_url": image_url,
+            "added_by": str(ctx.author.id),
+            "added_at": str(datetime.datetime.utcnow())
+        }
+        save_market(market)
+
+        embed = discord.Embed(title="✅ Item Berhasil Ditambahkan!", color=discord.Color.green())
+        embed.add_field(name="ID", value=f"`{item_id}`", inline=False)
+        embed.add_field(name="Nama", value=name, inline=False)
+        embed.add_field(name="Harga", value=f"{price} Coin", inline=True)
+        embed.set_image(url=image_url)
+        await ctx.send(embed=embed)
+
+    except asyncio.TimeoutError:
+        await ctx.send("⏰ Timeout. Ulangi dengan `!additem`.")
+    except Exception as e:
+        await ctx.send(f"❌ Error: {e}")
+
+@bot.command(name="market", aliases=["shop", "katalog"])
+async def show_market(ctx):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!", delete_after=5)
+        return
+
+    market = load_market()
+    if not market:
+        await ctx.send("🛒 Market masih kosong. Admin bisa tambah dengan `!additem` via DM.")
+        return
+
+    await ctx.send("🛒 **KATALOG MARKET BFL**")
+    for item_id, item in market.items():
+        embed = discord.Embed(
+            title=f"🛍️ {item['name']}",
+            description=item["description"],
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="ID", value=f"`{item_id}`", inline=True)
+        embed.add_field(name="💰 Harga", value=f"**{item['price']} Coin**", inline=True)
+        embed.set_image(url=item["image_url"])
+        embed.set_footer(text="Gunakan !buy <ID> untuk membeli")
+        await ctx.send(embed=embed)
+
+@bot.command(name="buy")
+async def buy_item(ctx, item_id: str = None):
+    if not is_game_channel(ctx):
+        await ctx.send(game_channel_msg(ctx), delete_after=8)
+        return
+    if not item_id:
+        await ctx.send("❌ Gunakan `!buy <item_id>` (contoh: `!buy item_1747320000`)")
+        return
+
+    market = load_market()
+    if item_id not in market:
+        await ctx.send("❌ Item ID tidak ditemukan di market.")
+        return
+
+    item = market[item_id]
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    balance = get_coins(uid)
+
+    if balance < item["price"]:
+        await ctx.send(f"❌ Coin tidak cukup! Kamu punya **{balance} Coin**, butuh **{item['price']} Coin**.")
+        return
+
+    # Potong coin
+    add_coins(uid, -item["price"])
+
+    # Tambah ke inventory
+    inventory = load_inventory()
+    if uid not in inventory:
+        inventory[uid] = []
+    inventory[uid].append({
+        "item_id": item_id,
+        "name": item["name"],
+        "price": item["price"],
+        "bought_at": str(datetime.datetime.utcnow())
+    })
+    save_inventory(inventory)
+
+    embed = discord.Embed(title="🎉 Pembelian Berhasil!", color=discord.Color.green())
+    embed.add_field(name="Item", value=item["name"], inline=False)
+    embed.add_field(name="Harga", value=f"-{item['price']} Coin", inline=True)
+    embed.add_field(name="Saldo tersisa", value=f"{get_coins(uid)} Coin", inline=True)
+    embed.set_image(url=item["image_url"])
+    await ctx.send(embed=embed)
+
+    try:
+        await ctx.author.send(f"✅ Kamu berhasil membeli **{item['name']}**!\nItem sudah masuk ke inventory kamu.")
+    except:
+        pass
+
+@bot.command(name="inventory", aliases=["inv", "barang", "myitems"])
+async def show_inventory(ctx, member: discord.Member = None):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!", delete_after=5)
+        return
+    member = member or ctx.author
     uid = str(member.id)
-    ensure_user(uid)
-    add_cash(uid, -amt)
-    await ctx.send(f"✅ **{amt:,} BFcash** diambil dari {member.mention}. Saldo: **{get_cash(uid):,} BFcash**")
+    inventory = load_inventory().get(uid, [])
+    if not inventory:
+        await ctx.send(f"🛍️ {member.mention} belum punya barang di inventory.")
+        return
 
-# ─── HELP BCASH ──────────────────────────────────────
-@bot.command(name="helpcash", aliases=["gamehelp","bchelp"])
-async def help_cash(ctx):
-    embed = discord.Embed(title="💰 BFcash — Panduan Lengkap", color=discord.Color.gold())
-    embed.add_field(name="📊 Info & Saldo",
-        value="`!bcash [@user]` — Cek saldo\n`!topcash` — Leaderboard terkaya\n`!daily` — Claim reward harian",
-        inline=False)
-    embed.add_field(name="🎮 Games",
-        value="`!hunt` — Berburu hewan (30d CD)\n`!fish` — Mancing (45d CD)\n`!battle` — Lawan monster (60d CD)\n`!slots <bet>` — Mesin slot (10d CD)\n`!flip <heads/tails> <bet>` — Coin flip (5d CD)\n`!roulette <warna> <bet>` — Roulette\n`!rob @user` — Rampok user (120d CD)",
-        inline=False)
-    embed.add_field(name="💸 Transaksi",
-        value="`!transfer @user <jumlah>` — Kirim BFcash\n`!deposit` — Deposit IDR → BFcash (via DM)\n`!convert` — Convert BFcash → IDR (via DM)\n\n📌 Rate: Rp 1.000 = 200.000 BFcash\n📌 Min convert: 1.000.000 BFcash = Rp 5.000",
-        inline=False)
-    embed.add_field(name="👑 Admin",
-        value="`!givecash @user <jumlah>`\n`!removecash @user <jumlah>`",
-        inline=False)
-    embed.set_footer(text="Asisten Lurah BFL • Join server = 50.000 BFcash gratis!")
+    embed = discord.Embed(title=f"🛍️ Inventory — {member.display_name}", color=discord.Color.purple())
+    for item in inventory[-10:]:  # tampilkan 10 terakhir
+        embed.add_field(
+            name=item["name"],
+            value=f"ID: `{item['item_id']}` • Dibeli: {item['bought_at'][:10]}",
+            inline=False
+        )
+    embed.set_footer(text=f"Total item: {len(inventory)}")
     await ctx.send(embed=embed)
 
 # ═══════════════════════════════════════════════════════
 #  MAIN
-# ═══════════════════════
+# ═══════════════════════════════════════════════════════
 bot.run(TOKEN)
+</FILE>
