@@ -36,32 +36,6 @@ CUSTOM_CMD_FILE  = "custom_commands.json"
 COIN_FILE        = "coins.json"
 MARKET_FILE      = "market.json"
 INVENTORY_FILE   = "inventory.json"
-MINING_FILE      = "mining.json"
-TRADE_FILE        = "trade.json"
-PRICE_FILE        = "price.json"
-
-
-# ═══════════════════════════════════════════════════════
-#  EXTRA SYSTEM
-# ═══════════════════════════════════════════════════════
-def load_json(path, default=None):
-    if default is None:
-        default = {}
-    if not os.path.exists(path):
-        with open(path, "w") as f:
-            json.dump(default, f)
-    with open(path, "r") as f:
-        return json.load(f)
-
-def save_json(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=4)
-
-def load_price():
-    return load_json(PRICE_FILE, {"buy":100, "sell":100, "market":1.0, "holders":0})
-
-def save_price(d):
-    save_json(PRICE_FILE, d)
 
 # ═══════════════════════════════════════════════════════
 #  LEVEL CONFIG
@@ -1858,170 +1832,24 @@ async def show_inventory(ctx, member: discord.Member = None):
 bot.run(TOKEN)
 
 
-# ═══════════════════════════════════════════════════════
-#  SPAM CHANNEL ONLY
-# ═══════════════════════════════════════════════════════
-async def cog_check_spam(ctx):
-    if isinstance(ctx.channel, discord.DMChannel):
-        return True
-    if ctx.channel.id != SPAM_CHANNEL_ID:
-        await ctx.send("❌ Semua command hanya bisa dipakai di #spam.")
-        return False
-    return True
-
-# ═══════════════════════════════════════════════════════
-#  ADMIN PRICE SYSTEM
-# ═══════════════════════════════════════════════════════
-@bot.command(name="setprice")
-async def setprice(ctx, buy:int=None, sell:int=None):
-    if ctx.author.id != OWNER_ID:
-        return
-    if not buy or not sell:
-        await ctx.send("Contoh: !setprice 100 95")
-        return
-    data = load_price()
-    data["buy"] = buy
-    data["sell"] = sell
-    save_price(data)
-    await ctx.send(f"✅ Harga coin diupdate BUY Rp{buy} | SELL Rp{sell}")
-
-@bot.command(name="price")
-async def price(ctx):
-    data = load_price()
-    await ctx.send(f"💹 BUY: Rp{data['buy']} | SELL: Rp{data['sell']}")
-
-# ═══════════════════════════════════════════════════════
-#  DEPOSIT SYSTEM
-# ═══════════════════════════════════════════════════════
-@bot.command(name="deposit")
-async def deposit(ctx, coin:int=None):
-    if not coin or coin < 100:
-        await ctx.send("❌ Minimal deposit 100 coin.")
-        return
-    data = load_price()
-    total = coin * data["buy"]
-    await ctx.send(f"💰 Deposit {coin} coin\nTransfer: Rp{total:,}\nKirim bukti ke admin.")
-
-# ═══════════════════════════════════════════════════════
-#  ADMIN CHECK USER BALANCE
-# ═══════════════════════════════════════════════════════
-@bot.command(name="checkbalance")
-async def checkbalance(ctx, member: discord.Member=None):
-    if ctx.author.id != OWNER_ID:
-        return
-    if not member:
-        return
-    uid = str(member.id)
-    ensure_coins(uid)
-    await ctx.send(f"💰 Saldo {member.mention}: {get_coins(uid)} coin")
-
-# ═══════════════════════════════════════════════════════
-#  TRADE GAME
-# ═══════════════════════════════════════════════════════
-@bot.command(name="trade")
-async def trade(ctx, direction:str=None, amount:int=None):
-    if direction not in ["up","down"]:
-        await ctx.send("Contoh: !trade up 5")
-        return
-    if not amount or amount < 5 or amount > 10:
-        await ctx.send("❌ Min 5 coin max 10 coin.")
-        return
-
-    uid = str(ctx.author.id)
-    ensure_coins(uid)
-
-    if get_coins(uid) < amount:
-        await ctx.send("❌ Saldo tidak cukup.")
-        return
-
-    add_coins(uid, -amount)
-
-    await ctx.send("📈 Trade dibuka... tunggu 1 menit.")
-
-    await asyncio.sleep(60)
-
-    price_data = load_price()
-
-    market = random.choice(["up", "down"])
-
-    if market == "up":
-        price_data["market"] += round(random.uniform(0.1, 1.5), 2)
-    else:
-        price_data["market"] -= round(random.uniform(0.1, 1.0), 2)
-
-    save_price(price_data)
-
-    if direction == market:
-        reward = amount * 2
-        add_coins(uid, reward)
-        await ctx.send(f"✅ Trade WIN! Pasar {market.upper()}\nReward: {reward} coin")
-    else:
-        await ctx.send(f"❌ Trade LOSE! Pasar {market.upper()}")
-
-
-
-# ═══════════════════════════════════════════════════════
-#  PRICE CHART SYSTEM
-# ═══════════════════════════════════════════════════════
-import matplotlib.pyplot as plt
-
-PRICE_HISTORY_FILE = "price_history.json"
-
-def load_price_history():
-    return load_json(PRICE_HISTORY_FILE, default=[])
-
-def save_price_history(d):
-    save_json(PRICE_HISTORY_FILE, d)
-
-def add_price_history(price):
-    data = load_price_history()
-
-    data.append(price)
-
-    if len(data) > 50:
-        data = data[-50:]
-
-    save_price_history(data)
-
-@bot.command(name="chart")
-async def chart(ctx):
-    history = load_price_history()
-
-    if len(history) < 2:
-        await ctx.send("❌ Data chart belum cukup.")
-        return
-
-    plt.figure(figsize=(8,4))
-    plt.plot(history)
-    plt.title("COIN / IDR Market")
-    plt.xlabel("Market Movement")
-    plt.ylabel("Price")
-
-    chart_path = "chart.png"
-    plt.savefig(chart_path)
-    plt.close()
-
-    await ctx.send(file=discord.File(chart_path))
-
-
-
+# ====================== MARKET HELP SYSTEM ======================
 
 @bot.command(name="help")
 async def help_command(ctx):
 
     embed = discord.Embed(
         title="📚 COMMAND LIST",
-        description="List command market & game",
+        description="Market & Game Commands",
         color=discord.Color.gold()
     )
 
     embed.add_field(
         name="🪙 Economy",
         value=(
-            "`!price` → lihat harga coin\n"
+            "`!price`\n"
             "`!convertcoin <jumlah>`\n"
             "`!deposit`\n"
-            "`!chart` → grafik market"
+            "`!chart`"
         ),
         inline=False
     )
@@ -2037,19 +1865,18 @@ async def help_command(ctx):
     )
 
     embed.add_field(
-        name="📈 Market System",
+        name="📈 Market",
         value=(
-            "• Harga coin dinamis\n"
+            "• Dynamic price\n"
             "• Supply & burn system\n"
-            "• Market volatility\n"
-            "• Holder effect"
+            "• Holder effect\n"
+            "• Random market movement"
         ),
         inline=False
     )
 
-    embed.set_footer(text="Gunakan command di channel #spam")
-
     await ctx.send(embed=embed)
+
 
 @bot.command(name="helpadmin")
 @commands.has_permissions(administrator=True)
@@ -2081,3 +1908,47 @@ async def help_admin(ctx):
     )
 
     await ctx.send(embed=embed)
+
+# ====================== PRICE CHART ======================
+
+import matplotlib.pyplot as plt
+
+PRICE_HISTORY_FILE = "price_history.json"
+
+def load_price_history():
+    return load_json(PRICE_HISTORY_FILE, default=[])
+
+def save_price_history(d):
+    save_json(PRICE_HISTORY_FILE, d)
+
+def add_price_history(price):
+    data = load_price_history()
+    data.append(price)
+
+    if len(data) > 50:
+        data = data[-50:]
+
+    save_price_history(data)
+
+@bot.command(name="chart")
+async def chart(ctx):
+
+    history = load_price_history()
+
+    if len(history) < 2:
+        await ctx.send("❌ Data chart belum cukup.")
+        return
+
+    plt.figure(figsize=(8,4))
+    plt.plot(history)
+
+    plt.title("COIN / IDR MARKET")
+    plt.xlabel("Movement")
+    plt.ylabel("Price")
+
+    chart_path = "chart.png"
+
+    plt.savefig(chart_path)
+    plt.close()
+
+    await ctx.send(file=discord.File(chart_path))
