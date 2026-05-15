@@ -1829,29 +1829,114 @@ async def show_inventory(ctx, member: discord.Member = None):
 # ═══════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════
+bot.run(TOKEN)
 
-# ====================== MARKET HELP SYSTEM ======================
 
-@bot.command(name="chart")
-async def chart(ctx):
+# ================= SAFE MARKET SYSTEM =================
 
-    history = load_price_history()
+SPAM_CHANNEL_ID = 1473562223593918619
 
-    if len(history) < 2:
-        await ctx.send("❌ Data chart belum cukup.")
+def is_game_channel(ctx):
+    return ctx.channel.id == SPAM_CHANNEL_ID
+
+def game_channel_msg(ctx):
+    return "❌ Semua command hanya bisa digunakan di #spam"
+
+try:
+    coins
+except:
+    coins = {}
+
+def ensure_coins(uid):
+    if uid not in coins:
+        coins[uid] = 0
+
+def get_coins(uid):
+    ensure_coins(uid)
+    return coins[uid]
+
+def add_coins(uid, amount):
+    ensure_coins(uid)
+    coins[uid] += amount
+
+# ================= HELP COMMAND =================
+
+try:
+    bot.remove_command("help")
+except:
+    pass
+
+@bot.command(name="help")
+async def help_command(ctx):
+
+    if not is_game_channel(ctx):
+        await ctx.send(game_channel_msg(ctx))
         return
 
-    plt.figure(figsize=(8,4))
-    plt.plot(history)
+    embed = discord.Embed(
+        title="📚 COMMAND LIST",
+        color=discord.Color.gold()
+    )
 
-    plt.title("COIN / IDR MARKET")
-    plt.xlabel("Movement")
-    plt.ylabel("Price")
+    embed.add_field(
+        name="🪙 Economy",
+        value=(
+            "`!price`\n"
+            "`!convertcoin <jumlah>`\n"
+            "`!deposit`\n"
+            "`!chart`"
+        ),
+        inline=False
+    )
 
-    chart_path = "chart.png"
+    embed.add_field(
+        name="🎮 Games",
+        value=(
+            "`!slot <coin>`\n"
+            "`!trade up/down <coin>`\n"
+            "`!mining <1/2/3>`"
+        ),
+        inline=False
+    )
 
-    plt.savefig(chart_path)
-    plt.close()
+    await ctx.send(embed=embed)
 
-    await ctx.send(file=discord.File(chart_path))
-bot.run(TOKEN)
+@bot.command(name="helpadmin")
+@commands.has_permissions(administrator=True)
+async def helpadmin(ctx):
+
+    embed = discord.Embed(
+        title="👑 ADMIN COMMAND",
+        color=discord.Color.red()
+    )
+
+    embed.add_field(
+        name="⚙️ Admin",
+        value=(
+            "`!setprice buy sell`\n"
+            "`!checkbal @user`\n"
+            "`!addcoin @user jumlah`\n"
+            "`!removecoin @user jumlah`"
+        ),
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+# ================= ERROR HANDLER =================
+
+@bot.event
+async def on_command_error(ctx, error):
+
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Tidak punya permission.")
+        return
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Argument kurang.")
+        return
+
+    print(error)
