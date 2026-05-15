@@ -866,7 +866,12 @@ async def on_ready():
 
     check_tiktok.start()
     check_giveaways.start()
-    print("✅ Semua sistem aktif.")
+    # Start coin price auto-update
+    try:
+        auto_price_update.start()
+    except Exception:
+        pass
+    print(f"✅ Semua sistem aktif. Logged in as {bot.user}")
 
 @bot.event
 async def on_message(message):
@@ -1620,21 +1625,42 @@ async def verif_cmd(ctx):
 # ═══════════════════════════════════════════════════════
 @bot.command(name="help")
 async def help_cmd(ctx):
-    embed = discord.Embed(title="📖 Asisten Lurah BFL — Command List", color=discord.Color.blue())
-    embed.add_field(name="🏅 Level & Banner (di #spam)",
-        value="`!rank [@user]`\n`!leaderboard`\n`!mybanner`", inline=False)
-    embed.add_field(name="🪙 Coin System",
-        value="`!koin [@user]` — Cek saldo coin\n`!givecoin @user <jumlah>` — Admin beri coin\n💱 **100 Coin = Rp 10.000**\nTukar coin ke IDR via `!convertcoin` (min. 100 coin)", inline=False)
-    embed.add_field(name="🛒 Market System",
-        value="`!market` / `!shop` — Lihat katalog\n`!buy <item_id>` — Beli barang\n`!inventory` / `!inv` — Lihat barang kamu\n`!additem` — Admin tambah item (via DM)", inline=False)
+    embed = discord.Embed(
+        title="📖 Asisten Lurah BFL — Command List",
+        description="Prefix: `!` | Command game hanya di <#" + str(SPAM_CHANNEL_ID) + ">",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="🏅 Level & XP (di #spam)",
+        value=("`!rank [@user]` — Lihat rank card + banner kamu\n"
+               "`!leaderboard` / `!lb` / `!top` — Top 10 XP server\n"
+               "`!mybanner` — Info rarity & tema banner kamu\n"
+               "📌 XP dapet dari chat, level naik otomatis!"), inline=False)
+    embed.add_field(name="🪙 Coin System (di #spam)",
+        value=("`!koin [@user]` — Cek saldo coin kamu\n"
+               "`!convertcoin <jumlah>` — Tukar coin ke IDR (min. 100)\n"
+               "`!deposit <jumlah>` — Request deposit coin\n"
+               "`!price` — Cek harga coin saat ini\n"
+               "💱 Harga fluktuatif antara Rp8.000 – Rp13.000 / 100 coin"), inline=False)
+    embed.add_field(name="🎰 Mini Games (di #spam)",
+        value=("`!slot <bet>` — Mesin slot, taruhan coin (min. 1)\n"
+               "`!trade <up/down> <5-10>` — Prediksi harga coin, hasil 1 menit\n"
+               "`!mining <1/2/3>` — Mulai mining coin (level 1/2/3)\n"
+               "`!claimmining` — Klaim hasil mining yang sudah selesai"), inline=False)
+    embed.add_field(name="🛒 Market System (di #spam)",
+        value=("`!market` / `!shop` / `!katalog` — Lihat semua item\n"
+               "`!buy <item_id>` — Beli item dengan coin\n"
+               "`!inventory` / `!inv` [@user] — Lihat barang yang dimiliki"), inline=False)
     embed.add_field(name="🎙️ Voice Room",
-        value="`!createroom [nama]`", inline=False)
+        value=("`!createroom [nama]` — Buat voice room pribadi\n"
+               "📌 Room auto-hapus saat kosong, maks 10 orang"), inline=False)
     embed.add_field(name="📋 Verifikasi",
-        value="`!verif` — Mulai verifikasi via DM", inline=False)
+        value=("`!verif` — Mulai verifikasi via DM bot\n"
+               "📌 Kirim foto bukti → admin review → dapat role"), inline=False)
     embed.add_field(name="💤 AFK",
-        value="`!afk [alasan]` — Set status offline", inline=False)
-    embed.add_field(name="🎬 YouTube",
-        value="`!youtube` — Lihat daftar video", inline=False)
+        value=("`!afk [alasan]` — Set status AFK\n"
+               "📌 Status hilang otomatis saat kamu kirim pesan"), inline=False)
+    embed.add_field(name="🎬 YouTube & Info",
+        value="`!youtube` / `!yt` — Lihat daftar video YouTube BFL", inline=False)
     embed.set_footer(text="Asisten Lurah BFL • Gunakan !helpadmin untuk command admin")
     await ctx.send(embed=embed)
 
@@ -1643,26 +1669,50 @@ async def help_admin_cmd(ctx):
     if not is_admin(ctx.author):
         await ctx.send("❌ Hanya admin yang bisa melihat command ini.", delete_after=5)
         return
-    embed = discord.Embed(title="🛡️ Admin Command List — Asisten Lurah BFL", color=discord.Color.red())
+    embed = discord.Embed(
+        title="🛡️ Admin Command List — Asisten Lurah BFL",
+        description="Semua command di bawah hanya untuk Admin/Owner",
+        color=discord.Color.red()
+    )
     embed.add_field(name="⚠️ Moderasi Member",
-        value="`!warn @user [alasan]` — Beri peringatan (auto-kick di 3x)\n`!warnlist @user` — Lihat daftar warn\n`!clearwarn @user` — Hapus semua warn\n`!timeout @user <menit> [alasan]` — Timeout\n`!ban @user [alasan]` — Ban member\n`!unban <user_id>` — Unban member\n`!clear [n]` — Hapus n pesan", inline=False)
+        value=("`!warn @user [alasan]` — Beri peringatan (auto-kick di warn ke-3)\n"
+               "`!warnlist @user` — Lihat semua warn milik user\n"
+               "`!clearwarn @user` — Hapus semua warn user\n"
+               "`!timeout @user <menit> [alasan]` — Timeout member\n"
+               "`!ban @user [alasan]` — Ban member dari server\n"
+               "`!unban <user_id>` — Unban member via ID\n"
+               "`!clear [n]` / `!purge` / `!hapus` — Hapus n pesan (default 10)"), inline=False)
     embed.add_field(name="🎭 Role Management",
-        value="`!addrole @user <nama_role>` — Tambah role\n`!removerole @user <nama_role>` — Hapus role", inline=False)
-    embed.add_field(name="🪙 Coin Admin",
-        value="`!givecoin @user <jumlah>` — Tambah coin"
-`!checkbalance @user` — Cek balance user"
-`!setcoinprice <buy> <sell>` — Set harga coin"
-`!setspamchannel <channel_id>` — Set spam channel", inline=False)
-    embed.add_field(name="🛒 Market Admin",
-        value="`!additem` (via DM bot) — Tambah item + foto katalog", inline=False)
+        value=("`!addrole @user <nama_role>` — Tambahkan role ke member\n"
+               "`!removerole @user <nama_role>` — Hapus role dari member"), inline=False)
+    embed.add_field(name="🪙 Coin & Market Admin",
+        value=("`!givecoin @user <jumlah>` — Tambah coin ke user\n"
+               "`!checkbalance @user` — Cek saldo coin user\n"
+               "`!setprice <harga>` — Set harga 100 coin dalam IDR (max Rp13.000)\n"
+               "`!price` — Lihat harga coin saat ini\n"
+               "`!setspamchannel <channel_id>` — Ganti spam channel (via DM bot)\n"
+               "`!additem` — Tambah item market baru (via DM bot, ada panduan step-by-step)\n"
+               "📌 Item market butuh: nama, harga coin, deskripsi, foto katalog"), inline=False)
     embed.add_field(name="🎬 YouTube Database",
-        value="`!addyt <nama> <link>` — Tambah video\n`!removeyt <nama>` — Hapus video", inline=False)
+        value=("`!addyt <nama> <link>` — Tambah video YouTube ke database\n"
+               "`!removeyt <nama>` — Hapus video dari database\n"
+               "📌 Link harus youtube.com atau youtu.be"), inline=False)
     embed.add_field(name="🎉 Giveaway (via DM bot)",
-        value="`!setgiveaway <channel_id>` — Buat giveaway baru", inline=False)
+        value=("`!setgiveaway <channel_id>` — Buat giveaway baru\n"
+               "📌 Bot akan tanya: durasi (contoh: `1h`, `30m`, `2d`) lalu nama hadiah\n"
+               "📌 Giveaway otomatis berakhir & undi pemenang, pemenang di-DM bot"), inline=False)
     embed.add_field(name="📢 Pengumuman & Quote (via DM bot)",
-        value="`!pengumuman <channel_id> <pesan>` — Kirim pengumuman\n`!setquotechannel <channel_id>` — Set channel quote\n`!addquote <quote>` — Tambah quote baru\n`!kirimquote [channel_id]` — Kirim quote manual", inline=False)
+        value=("`!pengumuman <channel_id> <pesan>` — Kirim pengumuman @everyone\n"
+               "`!setquotechannel <channel_id>` — Set channel tujuan quote\n"
+               "`!addquote <quote>` — Tambah quote baru ke database\n"
+               "`!kirimquote [channel_id]` — Kirim quote random manual"), inline=False)
     embed.add_field(name="🎫 Ticket System",
-        value="`!setupticket` — Pasang panel ticket di channel", inline=False)
+        value=("`!setupticket` — Pasang panel ticket di TICKET_CHANNEL\n"
+               "📌 Setelah setup, member bisa klik tombol untuk buat ticket privat"), inline=False)
+    embed.add_field(name="📋 Verifikasi",
+        value=("📌 Verifikasi masuk otomatis via DM bot dari member\n"
+               "📌 Bot forward bukti ke owner, owner pilih role (Moderator/Stream/Clipper)\n"
+               "📌 Tekan ACC untuk approve atau REJECT untuk tolak"), inline=False)
     embed.set_footer(text="Asisten Lurah BFL • Hanya terlihat oleh Admin/Owner")
     await ctx.send(embed=embed)
 
@@ -1937,13 +1987,7 @@ def update_market_price():
 async def auto_price_update():
     update_market_price()
 
-@bot.event
-async def on_ready():
-    try:
-        auto_price_update.start()
-    except:
-        pass
-    print(f"Logged in as {bot.user}")
+
 
 @bot.command(name="convertcoin")
 async def convert_coin(ctx, amount:int=None):
@@ -1991,7 +2035,7 @@ async def deposit_cmd(ctx, amount:int=None):
         return await ctx.send("❌ Minimum deposit 100 coin (Rp10.000)")
     price = load_price().get("price",10000)
     total = int((amount/100)*price)
-    await ctx.author.send(f"📥 Deposit request\\nJumlah: {amount} coin\\nTransfer: Rp{total:,}\\nKirim bukti pembayaran ke admin.")
+    await ctx.author.send(f"📥 **Deposit Request**\nJumlah: **{amount} coin**\nTransfer: **Rp{total:,}**\nKirim bukti pembayaran ke admin untuk diproses.")
 
 @bot.command(name="setspamchannel")
 async def set_spam_channel(ctx, channel_id:int=None):
