@@ -1618,6 +1618,77 @@ async def verif_cmd(ctx):
 # ═══════════════════════════════════════════════════════
 #  COMMANDS — HELP
 # ═══════════════════════════════════════════════════════
+@bot.command(name="help")
+async def help_cmd(ctx):
+    embed = discord.Embed(title="📖 Asisten Lurah BFL — Command List", color=discord.Color.blue())
+    embed.add_field(name="🏅 Level & Banner (di #spam)",
+        value="`!rank [@user]`\n`!leaderboard`\n`!mybanner`", inline=False)
+    embed.add_field(name="🪙 Coin System",
+        value="`!koin [@user]` — Cek saldo coin\n`!givecoin @user <jumlah>` — Admin beri coin\n💱 **100 Coin = Rp 10.000**\nTukar coin ke IDR via `!convertcoin` (min. 100 coin)", inline=False)
+    embed.add_field(name="🛒 Market System",
+        value="`!market` / `!shop` — Lihat katalog\n`!buy <item_id>` — Beli barang\n`!inventory` / `!inv` — Lihat barang kamu\n`!additem` — Admin tambah item (via DM)", inline=False)
+    embed.add_field(name="🎙️ Voice Room",
+        value="`!createroom [nama]`", inline=False)
+    embed.add_field(name="📋 Verifikasi",
+        value="`!verif` — Mulai verifikasi via DM", inline=False)
+    embed.add_field(name="💤 AFK",
+        value="`!afk [alasan]` — Set status offline", inline=False)
+    embed.add_field(name="🎬 YouTube",
+        value="`!youtube` — Lihat daftar video", inline=False)
+    embed.set_footer(text="Asisten Lurah BFL • Gunakan !helpadmin untuk command admin")
+    await ctx.send(embed=embed)
+
+@bot.command(name="helpadmin")
+async def help_admin_cmd(ctx):
+    if not is_admin(ctx.author):
+        await ctx.send("❌ Hanya admin yang bisa melihat command ini.", delete_after=5)
+        return
+    embed = discord.Embed(title="🛡️ Admin Command List — Asisten Lurah BFL", color=discord.Color.red())
+    embed.add_field(name="⚠️ Moderasi Member",
+        value="`!warn @user [alasan]` — Beri peringatan (auto-kick di 3x)\n`!warnlist @user` — Lihat daftar warn\n`!clearwarn @user` — Hapus semua warn\n`!timeout @user <menit> [alasan]` — Timeout\n`!ban @user [alasan]` — Ban member\n`!unban <user_id>` — Unban member\n`!clear [n]` — Hapus n pesan", inline=False)
+    embed.add_field(name="🎭 Role Management",
+        value="`!addrole @user <nama_role>` — Tambah role\n`!removerole @user <nama_role>` — Hapus role", inline=False)
+    embed.add_field(name="🪙 Coin Admin",
+        value="`!givecoin @user <jumlah>` — Tambah coin", inline=False)
+    embed.add_field(name="🛒 Market Admin",
+        value="`!additem` (via DM bot) — Tambah item + foto katalog", inline=False)
+    embed.add_field(name="🎬 YouTube Database",
+        value="`!addyt <nama> <link>` — Tambah video\n`!removeyt <nama>` — Hapus video", inline=False)
+    embed.add_field(name="🎉 Giveaway (via DM bot)",
+        value="`!setgiveaway <channel_id>` — Buat giveaway baru", inline=False)
+    embed.add_field(name="📢 Pengumuman & Quote (via DM bot)",
+        value="`!pengumuman <channel_id> <pesan>` — Kirim pengumuman\n`!setquotechannel <channel_id>` — Set channel quote\n`!addquote <quote>` — Tambah quote baru\n`!kirimquote [channel_id]` — Kirim quote manual", inline=False)
+    embed.add_field(name="🎫 Ticket System",
+        value="`!setupticket` — Pasang panel ticket di channel", inline=False)
+    embed.set_footer(text="Asisten Lurah BFL • Hanya terlihat oleh Admin/Owner")
+    await ctx.send(embed=embed)
+
+# ═══════════════════════════════════════════════════════
+#  COIN SYSTEM (menggantikan BFcash)
+# ═══════════════════════════════════════════════════════
+def load_coins():
+    return load_json(COIN_FILE, default={})
+
+def save_coins(d):
+    save_json(COIN_FILE, d)
+
+def get_coins(uid: str) -> int:
+    coins = load_coins()
+    return coins.get(uid, 0)
+
+def add_coins(uid: str, amount: int) -> int:
+    coins = load_coins()
+    current = coins.get(uid, 0)
+    coins[uid] = max(0, current + amount)
+    save_coins(coins)
+    return coins[uid]
+
+def ensure_coins(uid: str):
+    coins = load_coins()
+    if uid not in coins:
+        coins[uid] = 0
+        save_coins(coins)
+
 @bot.command(name="koin", aliases=["coins", "coin", "saldo"])
 async def coins_balance(ctx, member: discord.Member = None):
     if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
@@ -1830,113 +1901,3 @@ async def show_inventory(ctx, member: discord.Member = None):
 #  MAIN
 # ═══════════════════════════════════════════════════════
 bot.run(TOKEN)
-
-
-# ================= SAFE MARKET SYSTEM =================
-
-SPAM_CHANNEL_ID = 1473562223593918619
-
-def is_game_channel(ctx):
-    return ctx.channel.id == SPAM_CHANNEL_ID
-
-def game_channel_msg(ctx):
-    return "❌ Semua command hanya bisa digunakan di #spam"
-
-try:
-    coins
-except:
-    coins = {}
-
-def ensure_coins(uid):
-    if uid not in coins:
-        coins[uid] = 0
-
-def get_coins(uid):
-    ensure_coins(uid)
-    return coins[uid]
-
-def add_coins(uid, amount):
-    ensure_coins(uid)
-    coins[uid] += amount
-
-# ================= HELP COMMAND =================
-
-try:
-    bot.remove_command("help")
-except:
-    pass
-
-@bot.command(name="help")
-async def help_command(ctx):
-
-    if not is_game_channel(ctx):
-        await ctx.send(game_channel_msg(ctx))
-        return
-
-    embed = discord.Embed(
-        title="📚 COMMAND LIST",
-        color=discord.Color.gold()
-    )
-
-    embed.add_field(
-        name="🪙 Economy",
-        value=(
-            "`!price`\n"
-            "`!convertcoin <jumlah>`\n"
-            "`!deposit`\n"
-            "`!chart`"
-        ),
-        inline=False
-    )
-
-    embed.add_field(
-        name="🎮 Games",
-        value=(
-            "`!slot <coin>`\n"
-            "`!trade up/down <coin>`\n"
-            "`!mining <1/2/3>`"
-        ),
-        inline=False
-    )
-
-    await ctx.send(embed=embed)
-
-@bot.command(name="helpadmin")
-@commands.has_permissions(administrator=True)
-async def helpadmin(ctx):
-
-    embed = discord.Embed(
-        title="👑 ADMIN COMMAND",
-        color=discord.Color.red()
-    )
-
-    embed.add_field(
-        name="⚙️ Admin",
-        value=(
-            "`!setprice buy sell`\n"
-            "`!checkbal @user`\n"
-            "`!addcoin @user jumlah`\n"
-            "`!removecoin @user jumlah`"
-        ),
-        inline=False
-    )
-
-    await ctx.send(embed=embed)
-
-# ================= ERROR HANDLER =================
-
-@bot.event
-async def on_command_error(ctx, error):
-
-    if isinstance(error, commands.CommandNotFound):
-        return
-
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Tidak punya permission.")
-        return
-
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("❌ Argument kurang.")
-        return
-
-    print(error)
