@@ -1649,7 +1649,10 @@ async def help_admin_cmd(ctx):
     embed.add_field(name="🎭 Role Management",
         value="`!addrole @user <nama_role>` — Tambah role\n`!removerole @user <nama_role>` — Hapus role", inline=False)
     embed.add_field(name="🪙 Coin Admin",
-        value="`!givecoin @user <jumlah>` — Tambah coin", inline=False)
+        value="`!givecoin @user <jumlah>` — Tambah coin
+`!checkbalance @user` — Cek balance user
+`!setcoinprice <buy> <sell>` — Set harga coin
+`!setspamchannel <channel_id>` — Set spam channel", inline=False)
     embed.add_field(name="🛒 Market Admin",
         value="`!additem` (via DM bot) — Tambah item + foto katalog", inline=False)
     embed.add_field(name="🎬 YouTube Database",
