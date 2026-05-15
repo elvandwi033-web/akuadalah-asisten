@@ -1902,4 +1902,3 @@ async def show_inventory(ctx, member: discord.Member = None):
 #  MAIN
 # ═══════════════════════════════════════════════════════
 bot.run(TOKEN)
-</FILE>
