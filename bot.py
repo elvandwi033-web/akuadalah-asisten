@@ -36,6 +36,10 @@ CUSTOM_CMD_FILE  = "custom_commands.json"
 COIN_FILE        = "coins.json"
 MARKET_FILE      = "market.json"
 INVENTORY_FILE   = "inventory.json"
+DAILY_FILE       = "daily.json"
+HISTORY_FILE     = "history.json"
+LOTTERY_FILE     = "lottery.json"
+DUEL_FILE        = "duel.json"
 
 # ═══════════════════════════════════════════════════════
 #  LEVEL CONFIG
@@ -1635,20 +1639,29 @@ async def help_cmd(ctx):
                "`!leaderboard` / `!lb` / `!top` — Top 10 XP server\n"
                "`!mybanner` — Info rarity & tema banner kamu\n"
                "📌 XP dapet dari chat, level naik otomatis!"), inline=False)
-    embed.add_field(name="🪙 Coin System (di #spam)",
-        value=("`!koin [@user]` — Cek saldo coin kamu\n"
-               "`!convertcoin <jumlah>` — Tukar coin ke IDR (min. 100)\n"
-               "`!deposit <jumlah>` — Request deposit coin\n"
-               "`!price` — Cek harga coin saat ini\n"
-               "💱 Harga fluktuatif antara Rp8.000 – Rp13.000 / 100 coin"), inline=False)
+    embed.add_field(name="💰 Bcash System (di #spam)",
+        value=("`!koin [@user]` — Cek saldo + nilai IDR Bcash kamu\n"
+               "`!daily` / `!klaim` — Klaim reward harian (streak 1–7, max 7 Bcash)\n"
+               "`!kirim @user <jumlah>` — Transfer Bcash ke member lain\n"
+               "`!convertcoin <jumlah>` — Tukar Bcash ke IDR (min. 100)\n"
+               "`!deposit <jumlah>` — Request deposit Bcash\n"
+               "`!price` — Cek harga Bcash saat ini\n"
+               "💱 Harga bergerak fluktuatif, cek `!price` untuk harga terkini"), inline=False)
     embed.add_field(name="🎰 Mini Games (di #spam)",
-        value=("`!slot <bet>` — Mesin slot, taruhan coin (min. 1)\n"
-               "`!trade <up/down> <5-10>` — Prediksi harga coin, hasil 1 menit\n"
-               "`!mining <1/2/3>` — Mulai mining coin (level 1/2/3)\n"
+        value=("`!slot <bet>` — Mesin slot, taruhan Bcash (min. 1)\n"
+               "`!duel @user <jumlah>` — Tantang user duel Bcash (ketik `ya` untuk terima)\n"
+               "`!trade <up/down> <5-10>` — Prediksi harga Bcash, hasil 1 menit\n"
+               "`!mining <1/2/3>` — Mulai mining Bcash (level 1/2/3)\n"
                "`!claimmining` — Klaim hasil mining yang sudah selesai"), inline=False)
+    embed.add_field(name="🎰 Lotre Harian (di #spam)",
+        value=("`!lotre [jumlah]` — Beli tiket lotre (5 Bcash/tiket, max 20)\n"
+               "`!infolotre` — Cek status lotre, tiketmu & peluang menang\n"
+               "📌 Admin buka lotre & undi pemenang, hadiah diset oleh admin"), inline=False)
+    embed.add_field(name="📊 Statistik (di #spam)",
+        value=("`!history [@user]` / `!riwayat` — Lihat 10 transaksi Bcash terakhir"), inline=False)
     embed.add_field(name="🛒 Market System (di #spam)",
         value=("`!market` / `!shop` / `!katalog` — Lihat semua item\n"
-               "`!buy <item_id>` — Beli item dengan coin\n"
+               "`!buy <item_id>` — Beli item dengan Bcash\n"
                "`!inventory` / `!inv` [@user] — Lihat barang yang dimiliki"), inline=False)
     embed.add_field(name="🎙️ Voice Room",
         value=("`!createroom [nama]` — Buat voice room pribadi\n"
@@ -1685,14 +1698,14 @@ async def help_admin_cmd(ctx):
     embed.add_field(name="🎭 Role Management",
         value=("`!addrole @user <nama_role>` — Tambahkan role ke member\n"
                "`!removerole @user <nama_role>` — Hapus role dari member"), inline=False)
-    embed.add_field(name="🪙 Coin & Market Admin",
-        value=("`!givecoin @user <jumlah>` — Tambah coin ke user\n"
-               "`!checkbalance @user` — Cek saldo coin user\n"
-               "`!setprice <harga>` — Set harga 100 coin dalam IDR (max Rp13.000)\n"
-               "`!price` — Lihat harga coin saat ini\n"
+    embed.add_field(name="💰 Bcash & Market Admin",
+        value=("`!givecoin @user <jumlah>` — Tambah Bcash ke user\n"
+               "`!checkbalance @user` — Cek saldo Bcash user\n"
+               "`!setprice <harga>` — Set batas atas (cap) harga Bcash — harga tidak bisa melebihi ini\n"
+               "`!price` — Lihat harga Bcash saat ini\n"
                "`!setspamchannel <channel_id>` — Ganti spam channel (via DM bot)\n"
                "`!additem` — Tambah item market baru (via DM bot, ada panduan step-by-step)\n"
-               "📌 Item market butuh: nama, harga coin, deskripsi, foto katalog"), inline=False)
+               "📌 Item market butuh: nama, harga Bcash, deskripsi, foto katalog"), inline=False)
     embed.add_field(name="🎬 YouTube Database",
         value=("`!addyt <nama> <link>` — Tambah video YouTube ke database\n"
                "`!removeyt <nama>` — Hapus video dari database\n"
@@ -1765,7 +1778,22 @@ def ensure_coins(uid: str):
         coins[uid] = 0
         save_coins(coins)
 
-@bot.command(name="koin", aliases=["coins", "coin"])
+def log_history(uid: str, label: str, amount: int):
+    """Catat transaksi ke history.json. amount positif = masuk, negatif = keluar."""
+    uid = str(uid)
+    data = load_json(HISTORY_FILE, default={})
+    if uid not in data:
+        data[uid] = []
+    entry = {
+        "label":  label,
+        "amount": amount,
+        "time":   datetime.datetime.utcnow().strftime("%d/%m %H:%M")
+    }
+    data[uid].insert(0, entry)   # terbaru di atas
+    data[uid] = data[uid][:30]   # simpan max 30 entri
+    save_json(HISTORY_FILE, data)
+
+@bot.command(name="koin", aliases=["coins", "coin", "bcash", "wallet"])
 async def coins_balance(ctx, member: discord.Member = None):
     if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
         await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!", delete_after=5)
@@ -1774,11 +1802,41 @@ async def coins_balance(ctx, member: discord.Member = None):
     uid = str(member.id)
     ensure_coins(uid)
     balance = get_coins(uid)
-    embed = discord.Embed(title=f"🪙 Dompet Coin — {member.display_name}", color=discord.Color.gold())
-    embed.add_field(name="🪙 Saldo", value=f"{balance:,} Coin", inline=True)
-    embed.add_field(name="💱 Nilai IDR", value="100 Coin = Rp 10.000", inline=True)
+
+    price_data = load_price()
+    price     = price_data["price"]       # harga per 100 Bcash saat ini
+    price_cap = price_data["price_cap"]
+    total_idr = int((balance / 100) * price)
+    pct_cap   = round((price / price_cap) * 100, 1)
+
+    # Trend singkat
+    hist = price_data.get("history", [price])
+    if len(hist) >= 2:
+        trend = "📈" if price >= hist[-2] else "📉"
+    else:
+        trend = "➡️"
+
+    embed = discord.Embed(
+        title=f"💰 Dompet Bcash — {member.display_name}",
+        color=discord.Color.gold()
+    )
+    embed.add_field(
+        name="💰 Saldo",
+        value=f"**{balance:,} Bcash**",
+        inline=True
+    )
+    embed.add_field(
+        name="💵 Nilai IDR",
+        value=f"**Rp{total_idr:,}**",
+        inline=True
+    )
+    embed.add_field(
+        name=f"{trend} Harga Bcash",
+        value=f"**Rp{price:,}** / 100 Bcash\n({pct_cap}% dari cap Rp{price_cap:,})",
+        inline=False
+    )
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text="Asisten Lurah BFL • Coin System")
+    embed.set_footer(text="Asisten Lurah BFL • Bcash | !price untuk detail market")
     await ctx.send(embed=embed)
 
 @bot.command(name="givecoin")
@@ -1793,7 +1851,9 @@ async def give_coin(ctx, member: discord.Member = None, amount: str = None):
     uid = str(member.id)
     ensure_coins(uid)
     new_balance = add_coins(uid, amt)
-    await ctx.send(f"✅ **{amt:,} Coin** diberikan ke {member.mention}. Saldo sekarang: **{new_balance:,} Coin**")
+    mint_coins(amt)
+    log_history(uid, f"💝 Givecoin dari Admin", +amt)
+    await ctx.send(f"✅ **{amt:,} Bcash** diberikan ke {member.mention}. Saldo sekarang: **{new_balance:,} Bcash**")
 
 # ═══════════════════════════════════════════════════════
 #  MARKET SYSTEM
@@ -1830,7 +1890,7 @@ async def add_market_item(ctx):
         name_msg = await bot.wait_for("message", check=check, timeout=180)
         name = name_msg.content.strip()[:100]
 
-        await ctx.send("**2.** Ketik **harga dalam Coin** (contoh: 500)")
+        await ctx.send("**2.** Ketik **harga dalam Bcash** (contoh: 500)")
         price_msg = await bot.wait_for("message", check=check, timeout=60)
         if not price_msg.content.strip().isdigit():
             await ctx.send("❌ Harga harus angka!")
@@ -1868,7 +1928,7 @@ async def add_market_item(ctx):
         embed = discord.Embed(title="✅ Item Berhasil Ditambahkan!", color=discord.Color.green())
         embed.add_field(name="ID", value=f"`{item_id}`", inline=False)
         embed.add_field(name="Nama", value=name, inline=False)
-        embed.add_field(name="Harga", value=f"{price} Coin", inline=True)
+        embed.add_field(name="Harga", value=f"{price} Bcash", inline=True)
         embed.set_image(url=image_url)
         await ctx.send(embed=embed)
 
@@ -1896,7 +1956,7 @@ async def show_market(ctx):
             color=discord.Color.gold()
         )
         embed.add_field(name="ID", value=f"`{item_id}`", inline=True)
-        embed.add_field(name="💰 Harga", value=f"**{item['price']} Coin**", inline=True)
+        embed.add_field(name="💰 Harga", value=f"**{item['price']} Bcash**", inline=True)
         embed.set_image(url=item["image_url"])
         embed.set_footer(text="Gunakan !buy <ID> untuk membeli")
         await ctx.send(embed=embed)
@@ -1921,7 +1981,7 @@ async def buy_item(ctx, item_id: str = None):
     balance = get_coins(uid)
 
     if balance < item["price"]:
-        await ctx.send(f"❌ Coin tidak cukup! Kamu punya **{balance} Coin**, butuh **{item['price']} Coin**.")
+        await ctx.send(f"❌ Coin tidak cukup! Kamu punya **{balance} Coin**, butuh **{item['price']} Bcash**.")
         return
 
     # Potong coin
@@ -1941,8 +2001,8 @@ async def buy_item(ctx, item_id: str = None):
 
     embed = discord.Embed(title="🎉 Pembelian Berhasil!", color=discord.Color.green())
     embed.add_field(name="Item", value=item["name"], inline=False)
-    embed.add_field(name="Harga", value=f"-{item['price']} Coin", inline=True)
-    embed.add_field(name="Saldo tersisa", value=f"{get_coins(uid)} Coin", inline=True)
+    embed.add_field(name="Harga", value=f"-{item['price']} Bcash", inline=True)
+    embed.add_field(name="Saldo tersisa", value=f"{get_coins(uid)} Bcash", inline=True)
     embed.set_image(url=item["image_url"])
     await ctx.send(embed=embed)
 
@@ -1981,69 +2041,180 @@ async def show_inventory(ctx, member: discord.Member = None):
 MINING_FILE = "mining.json"
 PRICE_FILE = "coin_price.json"
 
+# ── Default state market ──────────────────────────────────
+_PRICE_DEFAULT = {
+    "price":      5000,   # harga awal (IDR per 100 coin)
+    "price_cap":  10000,  # batas atas harga (diset admin via !setprice)
+    "supply":     10000,  # total coin beredar
+    "pressure":   0,      # tekanan pasar: >0 = bullish, <0 = bearish
+    "history":    [],     # riwayat harga 24 terakhir (tiap 1 jam)
+}
+
 def load_price():
-    return load_json(PRICE_FILE, default={"price":100,"supply":10000,"holders":0})
+    d = load_json(PRICE_FILE, default=_PRICE_DEFAULT.copy())
+    # Pastikan semua key ada (migrasi dari versi lama)
+    for k, v in _PRICE_DEFAULT.items():
+        d.setdefault(k, v)
+    # Migrasi: hapus hard-coded 8000/13000 floor/cap lama
+    if d.get("price_cap", 0) == 0:
+        d["price_cap"] = 10000
+    return d
 
 def save_price(d):
-    save_json(PRICE_FILE,d)
+    save_json(PRICE_FILE, d)
 
-def coin_to_idr(coin_amount:int):
+def coin_to_idr(coin_amount: int) -> int:
     data = load_price()
-    return int((coin_amount/100) * data.get("price",10000))
+    return int((coin_amount / 100) * data["price"])
 
-def burn_coins(amount:int):
+# ── Inti: hitung harga baru ───────────────────────────────
+def _calc_new_price(current: int, cap: int, supply: int, pressure: int) -> int:
+    """
+    Harga bergerak berdasarkan:
+    1. Random walk kecil (simulasi pasar bebas)
+    2. Pressure dari aktivitas user (slot, mining, trade)
+    3. Supply: makin banyak Bcash beredar → harga cenderung turun
+    4. Mean-reversion ringan supaya harga tidak stuck di ekstrem
+    """
+    floor = max(1000, cap // 5)   # floor = 20% dari cap yang admin set
+
+    # 1. Random walk: -1% ~ +1% dari harga saat ini
+    random_move = random.uniform(-0.012, 0.012) * current
+
+    # 2. Pressure dari aktivitas (decay tiap tick)
+    pressure_move = pressure * 8   # tiap unit pressure = Rp8
+
+    # 3. Supply pressure: kalau supply > 10000 harga kena tekanan turun
+    supply_ref = 10000
+    supply_move = -((supply - supply_ref) / supply_ref) * 40
+
+    # 4. Mean-reversion: tarik harga ke 60% cap jika terlalu ekstrem
+    mid = cap * 0.6
+    revert_move = (mid - current) * 0.005
+
+    raw = current + random_move + pressure_move + supply_move + revert_move
+    return max(floor, min(cap, int(round(raw))))
+
+# ── Fungsi market publik ──────────────────────────────────
+def market_tick(pressure_delta: int = 0) -> int:
+    """
+    Panggil setiap ada event (auto tiap 5 menit, atau dipicu aktivitas).
+    pressure_delta: positif = beli/burn (bullish), negatif = supply naik (bearish)
+    Return: harga baru
+    """
     data = load_price()
-    data["supply"] = max(1, data.get("supply",10000)-amount)
-    price = data.get("price",10000)
-    price = min(13000, price + random.randint(10,60))
-    data["price"] = price
+    # Decay pressure 30% tiap tick supaya tidak permanen
+    data["pressure"] = int(data.get("pressure", 0) * 0.70) + pressure_delta
+
+    new_price = _calc_new_price(
+        current=data["price"],
+        cap=data["price_cap"],
+        supply=data["supply"],
+        pressure=data["pressure"],
+    )
+    data["price"] = new_price
+
+    # Simpan history (max 24 entri = 2 jam jika tick 5 menit)
+    hist = data.get("history", [])
+    hist.append(new_price)
+    data["history"] = hist[-24:]
     save_price(data)
+    return new_price
 
-def update_market_price():
+def burn_coins(amount: int):
+    """Bcash di-burn → supply turun → bullish pressure."""
     data = load_price()
-    move = random.randint(-100,100)
-    data["price"] = max(8000, min(13000, data.get("price",10000)+move))
+    data["supply"] = max(1, data["supply"] - amount)
     save_price(data)
-    return data["price"]
+    market_tick(pressure_delta=+max(1, amount // 5))
 
+def mint_coins(amount: int):
+    """Bcash baru masuk ke sirkulasi → supply naik → bearish pressure."""
+    data = load_price()
+    data["supply"] = data["supply"] + amount
+    save_price(data)
+    market_tick(pressure_delta=-max(1, amount // 8))
+
+# ── Auto tick setiap 5 menit ──────────────────────────────
 @tasks.loop(minutes=5)
 async def auto_price_update():
-    update_market_price()
+    market_tick()
 
-
-
+# ── Commands ──────────────────────────────────────────────
 @bot.command(name="convertcoin")
-async def convert_coin(ctx, amount:int=None):
+async def convert_coin(ctx, amount: int = None):
     if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
         return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
     if not amount or amount < 100:
-        return await ctx.send("❌ Minimum convert **100 coin**. Contoh: `!convertcoin 100`")
+        return await ctx.send("❌ Minimum convert **100 Bcash**. Contoh: `!convertcoin 100`")
     uid = str(ctx.author.id)
     ensure_coins(uid)
     bal = get_coins(uid)
     if bal < amount:
-        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{bal:,} coin**, butuh: **{amount:,} coin**.")
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{bal:,} coin**, butuh: **{amount:,} Bcash**.")
     add_coins(uid, -amount)
     burn_coins(amount)
+    log_history(uid, f"💱 Convert ke IDR (Rp{coin_to_idr(amount):,})", -amount)
     idr = coin_to_idr(amount)
-    await ctx.author.send(f"✅ Convert berhasil!\n**{amount:,} coin** → **Rp{idr:,}**\nHubungi admin untuk pencairan.")
-    await ctx.send(f"✅ Convert **{amount:,} coin** berhasil. Cek DM kamu!")
+    await ctx.author.send(
+        f"✅ Convert berhasil!\n"
+        f"**{amount:,} Bcash** → **Rp{idr:,}**\n"
+        f"Harga saat convert: **Rp{load_price()['price']:,}** / 100 Bcash\n"
+        f"Hubungi admin untuk pencairan."
+    )
+    await ctx.send(f"✅ Convert **{amount:,} Bcash** berhasil. Cek DM kamu!")
 
 @bot.command(name="setprice")
-async def setprice(ctx, buy:int=None):
+async def setprice(ctx, cap: int = None):
+    """Admin set batas atas harga. Harga TIDAK langsung loncat ke angka ini."""
     if not is_admin(ctx.author):
-        return await ctx.send("❌ Admin only")
-    if not buy:
-        return await ctx.send("Contoh !setprice 12000")
-    data=load_price()
-    data["price"]=min(13000,buy)
+        return await ctx.send("❌ Admin only.")
+    if not cap or cap < 1000:
+        return await ctx.send("❌ Contoh: `!setprice 12000` (min Rp1.000)")
+    data = load_price()
+    old_cap = data["price_cap"]
+    data["price_cap"] = cap
+    # Kalau harga saat ini sudah di atas cap baru, turunkan perlahan via pressure
+    if data["price"] > cap:
+        data["price"] = cap
     save_price(data)
-    await ctx.send(f"✅ Harga 100 coin sekarang Rp{data['price']:,}")
+    direction = "⬆️ dinaikkan" if cap > old_cap else "⬇️ diturunkan"
+    await ctx.send(
+        f"✅ Batas atas harga Bcash {direction} ke **Rp{cap:,}** / 100 Bcash.\n"
+        f"Harga pasar akan bergerak sendiri dan **tidak akan melewati** batas ini."
+    )
 
 @bot.command(name="price")
 async def price_cmd(ctx):
-    data=load_price()
-    await ctx.send(f"💹 Harga market saat ini: 100 Coin = Rp{data['price']:,}")
+    data = load_price()
+    price   = data["price"]
+    cap     = data["price_cap"]
+    supply  = data["supply"]
+    hist    = data.get("history", [price])
+    pct_cap = round((price / cap) * 100, 1)
+
+    # Trend: bandingkan harga sekarang vs 3 tick lalu
+    if len(hist) >= 4:
+        old = hist[-4]
+        if price > old:   trend = "📈 Naik"
+        elif price < old: trend = "📉 Turun"
+        else:             trend = "➡️ Stabil"
+    else:
+        trend = "➡️ Stabil"
+
+    embed = discord.Embed(title="💹 Bcash Market", color=discord.Color.gold())
+    embed.add_field(name="Harga saat ini",   value=f"**Rp{price:,}** / 100 Bcash", inline=True)
+    embed.add_field(name="Batas atas (cap)", value=f"Rp{cap:,}",                  inline=True)
+    embed.add_field(name="Total supply",     value=f"{supply:,} Bcash",             inline=True)
+    embed.add_field(name="% dari cap",       value=f"{pct_cap}%",                  inline=True)
+    embed.add_field(name="Tren (15 mnt)",    value=trend,                           inline=True)
+    if len(hist) >= 2:
+        spark = " ".join(
+            ("▲" if hist[i] >= hist[i-1] else "▼") for i in range(1, min(len(hist), 9))
+        )
+        embed.add_field(name="Pergerakan",   value=spark,                           inline=False)
+    embed.set_footer(text="Harga Bcash bergerak otomatis tiap 5 menit & dipengaruhi aktivitas server")
+    await ctx.send(embed=embed)
 
 @bot.command(name="checkbalance")
 async def checkbalance(ctx, member:discord.Member=None):
@@ -2052,15 +2223,15 @@ async def checkbalance(ctx, member:discord.Member=None):
     if not member:
         return await ctx.send("Gunakan !checkbalance @user")
     bal=get_coins(str(member.id))
-    await ctx.send(f"🪙 Saldo {member.mention}: {bal:,} coin")
+    await ctx.send(f"💰 Saldo {member.mention}: {bal:,} Bcash")
 
 @bot.command(name="deposit")
 async def deposit_cmd(ctx, amount:int=None):
     if not amount or amount < 100:
-        return await ctx.send("❌ Minimum deposit 100 coin (Rp10.000)")
+        return await ctx.send("❌ Minimum deposit 100 Bcash (Rp10.000)")
     price = load_price().get("price",10000)
     total = int((amount/100)*price)
-    await ctx.author.send(f"📥 **Deposit Request**\nJumlah: **{amount} coin**\nTransfer: **Rp{total:,}**\nKirim bukti pembayaran ke admin untuk diproses.")
+    await ctx.author.send(f"📥 **Deposit Request**\nJumlah: **{amount} Bcash**\nTransfer: **Rp{total:,}**\nKirim bukti pembayaran ke admin untuk diproses.")
 
 @bot.command(name="setspamchannel")
 async def set_spam_channel(ctx, channel_id:int=None):
@@ -2077,22 +2248,25 @@ async def slot_game(ctx, bet:int=None):
     if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
         return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
     if not bet or bet < 1:
-        return await ctx.send("❌ Min bet 1 coin")
+        return await ctx.send("❌ Min bet 1 Bcash")
     uid = str(ctx.author.id)
     ensure_coins(uid)
     balance = get_coins(uid)
     if balance < bet:
         return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{bet:,} coin**.")
     add_coins(uid, -bet)
+    log_history(uid, f"🎰 Slot bet", -bet)
     roll = random.randint(1, 100)
     if roll <= 45:
         multi = random.choice([1, 1.5, 2])
         reward = int(bet * multi)
         add_coins(uid, reward)
-        msg = f"🎰 JACKPOT! Menang **{reward} coin** (x{multi}) | Saldo: **{get_coins(uid):,} coin**"
+        mint_coins(0)
+        log_history(uid, f"🎰 Slot menang (x{multi})", +reward)
+        msg = f"🎰 JACKPOT! Menang **{reward} Bcash** (x{multi}) | Saldo: **{get_coins(uid):,} Bcash**"
     else:
         burn_coins(bet)
-        msg = f"💀 Kalah **{bet} coin** | Saldo: **{get_coins(uid):,} coin**"
+        msg = f"💀 Kalah **{bet} Bcash** | Saldo: **{get_coins(uid):,} Bcash**"
     await ctx.send(msg)
 
 MINING_LEVELS = {
@@ -2106,13 +2280,13 @@ async def mining_cmd(ctx, level:int=None):
     if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
         return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
     if not level or level not in MINING_LEVELS:
-        return await ctx.send("Gunakan `!mining <1/2/3>`\nLevel 1: 10 coin/10 jam | Level 2: 20 coin/15 jam | Level 3: 50 coin/20 jam")
+        return await ctx.send("Gunakan `!mining <1/2/3>`\nLevel 1: 10 Bcash/10 jam | Level 2: 20 Bcash/15 jam | Level 3: 50 Bcash/20 jam")
     uid = str(ctx.author.id)
     ensure_coins(uid)
     data = MINING_LEVELS[level]
     balance = get_coins(uid)
     if balance < data["cost"]:
-        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{data['cost']:,} coin**.")
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{data['cost']:,} Bcash**.")
     # Cek jika sudah ada mining aktif
     mining = load_json(MINING_FILE, {})
     if uid in mining:
@@ -2123,10 +2297,11 @@ async def mining_cmd(ctx, level:int=None):
             m, s = divmod(r, 60)
             return await ctx.send(f"⏳ Masih ada mining aktif! Selesai dalam **{h}j {m}m {s}d**. Gunakan `!claimmining`.")
     add_coins(uid, -data["cost"])
+    log_history(uid, f"⛏️ Mining lv{level} dimulai", -data["cost"])
     finish = (datetime.datetime.utcnow() + datetime.timedelta(hours=data["hours"])).timestamp()
     mining[uid] = {"finish": finish, "level": level}
     save_json(MINING_FILE, mining)
-    await ctx.send(f"⛏️ Mining level **{level}** dimulai selama **{data['hours']} jam** | Saldo: **{get_coins(uid):,} coin**")
+    await ctx.send(f"⛏️ Mining level **{level}** dimulai selama **{data['hours']} jam** | Saldo: **{get_coins(uid):,} Bcash**")
 
 @bot.command(name="claimmining")
 async def claim_mining(ctx):
@@ -2145,11 +2320,13 @@ async def claim_mining(ctx):
     data = MINING_LEVELS[level]
     if random.randint(1, 100) <= 40:
         add_coins(uid, data["cost"])
-        msg = f"❌ Mining gagal, modal **{data['cost']} coin** dikembalikan | Saldo: **{get_coins(uid):,} coin**"
+        log_history(uid, f"⛏️ Mining lv{level} gagal (modal balik)", +data["cost"])
+        msg = f"❌ Mining gagal, modal **{data['cost']} Bcash** dikembalikan | Saldo: **{get_coins(uid):,} Bcash**"
     else:
         reward = int(data["reward"])
         add_coins(uid, reward)
-        msg = f"✅ Mining berhasil! Mendapat **{reward} coin** | Saldo: **{get_coins(uid):,} coin**"
+        log_history(uid, f"⛏️ Mining lv{level} berhasil", +reward)
+        msg = f"✅ Mining berhasil! Mendapat **{reward} Bcash** | Saldo: **{get_coins(uid):,} Bcash**"
     del mining[uid]
     save_json(MINING_FILE, mining)
     await ctx.send(msg)
@@ -2161,29 +2338,513 @@ async def trade_cmd(ctx, direction:str=None, amount:int=None):
     if direction not in ["up", "down", "naik", "turun"]:
         return await ctx.send("Gunakan `!trade up/down <5-10>` | Contoh: `!trade up 5`")
     if not amount or amount < 5 or amount > 10:
-        return await ctx.send("❌ Jumlah taruhan min **5** dan max **10** coin.")
+        return await ctx.send("❌ Jumlah taruhan min **5** dan max **10** Bcash.")
     uid = str(ctx.author.id)
     ensure_coins(uid)
     balance = get_coins(uid)
     if balance < amount:
-        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{amount:,} coin**.")
+        return await ctx.send(f"❌ Coin tidak cukup! Saldo kamu: **{balance:,} coin**, butuh: **{amount:,} Bcash**.")
     add_coins(uid, -amount)
+    log_history(uid, "📈 Trade taruhan", -amount)
     start = load_price()["price"]
-    await ctx.send(f"📈 Trade dimulai! Taruhan **{amount} coin** | Harga awal: **Rp{start:,}** | Hasil dalam 1 menit...")
+    await ctx.send(f"📈 Trade dimulai! Taruhan **{amount} Bcash** | Harga awal: **Rp{start:,}** | Hasil dalam 1 menit...")
     await asyncio.sleep(60)
-    end = update_market_price()
+    end = market_tick(pressure_delta=random.randint(-3, 3))
     result_up = end > start
     pick_up = direction in ["up", "naik"]
     if result_up == pick_up:
         reward = amount * 2
         add_coins(uid, reward)
-        await ctx.send(f"✅ Trade **WIN**! Harga {start:,} → {end:,} | Reward: **{reward} coin** | Saldo: **{get_coins(uid):,} coin**")
+        mint_coins(0)
+        log_history(uid, f"📈 Trade WIN (Rp{start:,}→{end:,})", +reward)
+        await ctx.send(f"✅ Trade **WIN**! Harga Rp{start:,} → Rp{end:,} | Reward: **{reward} Bcash** | Saldo: **{get_coins(uid):,} Bcash**")
     else:
         burn_coins(amount)
-        await ctx.send(f"❌ Trade **LOSE**! Harga {start:,} → {end:,} | Saldo: **{get_coins(uid):,} coin**")
+        log_history(uid, f"📈 Trade LOSE (Rp{start:,}→{end:,})", -amount)
+        await ctx.send(f"❌ Trade **LOSE**! Harga Rp{start:,} → Rp{end:,} | Saldo: **{get_coins(uid):,} Bcash**")
+
+
+
+# ═══════════════════════════════════════════════════════
+#  TRANSFER BCASH (!kirim)
+# ═══════════════════════════════════════════════════════
+@bot.command(name="kirim", aliases=["transfer", "send"])
+async def kirim_bcash(ctx, target: discord.Member = None, amount: int = None):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
+
+    # Validasi input
+    if not target or not amount:
+        return await ctx.send(
+            "❌ Format salah! Gunakan: `!kirim @user <jumlah>`\n"
+            "Contoh: `!kirim @BFL 50`"
+        )
+    if target.bot:
+        return await ctx.send("❌ Tidak bisa kirim Bcash ke bot.")
+    if target.id == ctx.author.id:
+        return await ctx.send("❌ Tidak bisa kirim Bcash ke diri sendiri.")
+    if amount <= 0:
+        return await ctx.send("❌ Jumlah harus lebih dari 0.")
+
+    sender_uid = str(ctx.author.id)
+    target_uid = str(target.id)
+
+    ensure_coins(sender_uid)
+    ensure_coins(target_uid)
+
+    sender_bal = get_coins(sender_uid)
+    if sender_bal < amount:
+        return await ctx.send(
+            f"❌ Bcash tidak cukup!\n"
+            f"Saldo kamu: **{sender_bal:,} Bcash**, mau kirim: **{amount:,} Bcash**."
+        )
+
+    # Eksekusi transfer
+    add_coins(sender_uid, -amount)
+    add_coins(target_uid, +amount)
+    log_history(sender_uid, f"💸 Kirim ke {target.display_name}", -amount)
+    log_history(target_uid, f"💸 Terima dari {ctx.author.display_name}", +amount)
+    sender_new = get_coins(sender_uid)
+    target_new  = get_coins(target_uid)
+
+    embed = discord.Embed(
+        title="💸 Transfer Bcash Berhasil",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Dari",   value=ctx.author.mention, inline=True)
+    embed.add_field(name="Ke",     value=target.mention,     inline=True)
+    embed.add_field(name="Jumlah", value=f"**{amount:,} Bcash**", inline=True)
+    embed.add_field(name="Saldo kamu",       value=f"{sender_new:,} Bcash", inline=True)
+    embed.add_field(name=f"Saldo {target.display_name}", value=f"{target_new:,} Bcash", inline=True)
+    embed.set_footer(text="Asisten Lurah BFL • Bcash Transfer")
+    await ctx.send(embed=embed)
+
+    # Notifikasi DM ke penerima
+    try:
+        await target.send(
+            f"💸 Kamu menerima **{amount:,} Bcash** dari **{ctx.author.display_name}**!\n"
+            f"Saldo sekarang: **{target_new:,} Bcash**"
+        )
+    except discord.Forbidden:
+        pass   # DM tertutup, skip saja
+
+
+# ═══════════════════════════════════════════════════════
+#  DAILY REWARD (!daily)
+# ═══════════════════════════════════════════════════════
+DAILY_REWARDS = {
+    1: 1,   # Hari ke-1: 1 Bcash
+    2: 1,
+    3: 2,
+    4: 3,
+    5: 4,
+    6: 5,
+    7: 7,   # Hari ke-7 (streak penuh): 7 Bcash — bonus terbesar
+}
+DAILY_COOLDOWN_HOURS = 24
+
+@bot.command(name="daily", aliases=["klaim", "claimdaily"])
+async def daily_cmd(ctx):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
+
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+
+    daily_data = load_json(DAILY_FILE, default={})
+    now        = datetime.datetime.utcnow()
+    user_data  = daily_data.get(uid, {"last_claim": None, "streak": 0})
+
+    last_claim_str = user_data.get("last_claim")
+    streak         = user_data.get("streak", 0)
+
+    if last_claim_str:
+        last_claim = datetime.datetime.fromisoformat(last_claim_str)
+        delta_hours = (now - last_claim).total_seconds() / 3600
+
+        # Belum 24 jam → cooldown
+        if delta_hours < DAILY_COOLDOWN_HOURS:
+            sisa_detik = int((DAILY_COOLDOWN_HOURS * 3600) - (now - last_claim).total_seconds())
+            h, r = divmod(sisa_detik, 3600)
+            m, s = divmod(r, 60)
+            return await ctx.send(
+                f"⏳ Kamu sudah klaim hari ini!\n"
+                f"Cooldown: **{h}j {m}m {s}d** lagi.\n"
+                f"Streak saat ini: **{streak} hari** 🔥"
+            )
+
+        # Lebih dari 48 jam → streak reset
+        if delta_hours >= 48:
+            streak = 0
+
+    # Hitung streak baru (maks 7 untuk reward tertinggi, lalu reset ke 1)
+    streak = (streak % 7) + 1
+    reward  = DAILY_REWARDS[streak]
+
+    # Berikan Bcash & update data
+    add_coins(uid, reward)
+    mint_coins(reward)
+    log_history(uid, f"🌅 Daily reward (streak {streak}/7)", +reward)
+    daily_data[uid] = {
+        "last_claim": now.isoformat(),
+        "streak":     streak,
+    }
+    save_json(DAILY_FILE, daily_data)
+
+    new_bal = get_coins(uid)
+
+    # Buat progress bar streak (7 kotak)
+    bar = ""
+    for i in range(1, 8):
+        if i < streak:
+            bar += "🟨"   # sudah lewat
+        elif i == streak:
+            bar += "⭐"   # hari ini
+        else:
+            bar += "⬜"   # belum
+
+    # Pesan bonus hari ke-7
+    if streak == 7:
+        bonus_msg = "\n🎉 **STREAK SEMPURNA!** Kamu dapat bonus tertinggi minggu ini!"
+    else:
+        next_reward = DAILY_REWARDS[min(streak + 1, 7)]
+        bonus_msg = f"\n➡️ Besok (hari ke-{streak + 1 if streak < 7 else 1}): **{next_reward} Bcash**"
+
+    embed = discord.Embed(
+        title="🌅 Daily Reward",
+        description=f"{bar}",
+        color=discord.Color.orange()
+    )
+    embed.add_field(name="🎁 Reward",    value=f"**+{reward} Bcash**",    inline=True)
+    embed.add_field(name="🔥 Streak",    value=f"**{streak} / 7 hari**", inline=True)
+    embed.add_field(name="💰 Saldo",     value=f"**{new_bal:,} Bcash**", inline=True)
+    embed.add_field(
+        name="📅 Jadwal Reward",
+        value=(
+            "Hari 1: 1 • Hari 2: 1 • Hari 3: 2\n"
+            "Hari 4: 3 • Hari 5: 4 • Hari 6: 5\n"
+            "⭐ **Hari 7: 7 Bcash** ⭐"
+        ),
+        inline=False
+    )
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    embed.set_footer(text=f"Klaim lagi dalam 24 jam • Asisten Lurah BFL{bonus_msg}")
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════════════════════════════════
+#  RAIN BCASH (!rain) — Admin only
+# ═══════════════════════════════════════════════════════
+@bot.command(name="rain")
+async def rain_bcash(ctx, total: int = None, max_users: int = 5):
+    if not is_admin(ctx.author):
+        return await ctx.send("❌ Hanya admin.", delete_after=5)
+    if not total or total < 1:
+        return await ctx.send("❌ Format: `!rain <total_bcash> [jumlah_user]`\nContoh: `!rain 100 5` → sebar 100 Bcash ke 5 user aktif")
+
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=30)
+    aktif = set()
+    async for msg in ctx.channel.history(limit=200, after=cutoff):
+        if not msg.author.bot and msg.author.id != ctx.author.id:
+            aktif.add(msg.author)
+
+    if not aktif:
+        return await ctx.send("❌ Tidak ada user aktif dalam 30 menit terakhir di channel ini.")
+
+    winners = random.sample(list(aktif), min(max_users, len(aktif)))
+    per_user = total // len(winners)
+    if per_user < 1:
+        return await ctx.send(f"❌ Total terlalu kecil untuk dibagi ke {len(winners)} user. Min {len(winners)} Bcash.")
+
+    mention_list = []
+    for w in winners:
+        wuid = str(w.id)
+        ensure_coins(wuid)
+        add_coins(wuid, per_user)
+        mint_coins(per_user)
+        log_history(wuid, f"🌧️ Rain dari {ctx.author.display_name}", +per_user)
+        mention_list.append(w.mention)
+
+    embed = discord.Embed(
+        title="🌧️ RAIN BCASH!",
+        description=f"Admin **{ctx.author.display_name}** menyebar Bcash!",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="💰 Per User",    value=f"**{per_user:,} Bcash**",            inline=True)
+    embed.add_field(name="👥 Penerima",    value=f"**{len(winners)} user**",            inline=True)
+    embed.add_field(name="💸 Total Sebar", value=f"**{per_user*len(winners):,} Bcash**",inline=True)
+    embed.add_field(name="🎉 Penerima",    value=" ".join(mention_list),                inline=False)
+    embed.set_footer(text="Rajin aktif di server untuk kebagian rain berikutnya!")
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════════════════════════════════
+#  RIWAYAT TRANSAKSI (!history)
+# ═══════════════════════════════════════════════════════
+@bot.command(name="history", aliases=["riwayat", "log"])
+async def history_cmd(ctx, member: discord.Member = None):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
+
+    if member and not is_admin(ctx.author):
+        member = None
+
+    target  = member or ctx.author
+    uid     = str(target.id)
+    data    = load_json(HISTORY_FILE, default={})
+    entries = data.get(uid, [])
+
+    if not entries:
+        return await ctx.send(f"📭 Belum ada riwayat transaksi untuk **{target.display_name}**.")
+
+    lines = []
+    for e in entries[:10]:
+        sign  = "+" if e["amount"] > 0 else ""
+        arrow = "🟢" if e["amount"] > 0 else "🔴"
+        lines.append(f"{arrow} `{e['time']}` {e['label']} **{sign}{e['amount']:,} Bcash**")
+
+    embed = discord.Embed(
+        title=f"📊 Riwayat Transaksi — {target.display_name}",
+        description="\n".join(lines),
+        color=discord.Color.blurple()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.set_footer(text="Menampilkan 10 transaksi terakhir • Asisten Lurah BFL")
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════════════════════════════════
+#  DUEL BCASH (!duel)
+# ═══════════════════════════════════════════════════════
+_active_duels = set()
+
+@bot.command(name="duel")
+async def duel_cmd(ctx, target: discord.Member = None, amount: int = None):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
+    if not target or not amount:
+        return await ctx.send("❌ Format: `!duel @user <jumlah>`\nContoh: `!duel @BFL 50`")
+    if target.bot:
+        return await ctx.send("❌ Tidak bisa duel dengan bot.")
+    if target.id == ctx.author.id:
+        return await ctx.send("❌ Tidak bisa duel dengan diri sendiri.")
+    if amount < 1:
+        return await ctx.send("❌ Jumlah taruhan min 1 Bcash.")
+
+    ch_uid = str(ctx.author.id)
+    tg_uid = str(target.id)
+
+    if ch_uid in _active_duels or tg_uid in _active_duels:
+        return await ctx.send("❌ Salah satu pemain sedang dalam duel aktif. Tunggu selesai.")
+
+    ensure_coins(ch_uid); ensure_coins(tg_uid)
+    ch_bal = get_coins(ch_uid)
+    tg_bal = get_coins(tg_uid)
+
+    if ch_bal < amount:
+        return await ctx.send(f"❌ Bcash kamu tidak cukup! Saldo: **{ch_bal:,}**, butuh: **{amount:,}**.")
+    if tg_bal < amount:
+        return await ctx.send(f"❌ Bcash {target.display_name} tidak cukup! Saldo: **{tg_bal:,}**, butuh: **{amount:,}**.")
+
+    _active_duels.add(ch_uid); _active_duels.add(tg_uid)
+    await ctx.send(
+        f"⚔️ {target.mention} kamu ditantang duel oleh {ctx.author.mention}!\n"
+        f"Taruhan: **{amount:,} Bcash** | Ketik `ya` dalam 30 detik untuk menerima."
+    )
+
+    def check_accept(m):
+        return (m.author.id == target.id and
+                m.channel.id == ctx.channel.id and
+                m.content.lower() in ["ya", "yes", "iya", "ok"])
+
+    try:
+        await bot.wait_for("message", check=check_accept, timeout=30)
+    except asyncio.TimeoutError:
+        _active_duels.discard(ch_uid); _active_duels.discard(tg_uid)
+        return await ctx.send(f"⏰ {target.display_name} tidak merespons. Duel dibatalkan.")
+
+    add_coins(ch_uid, -amount)
+    add_coins(tg_uid, -amount)
+
+    anim_msg = await ctx.send("🪙 Lempar koin...")
+    await asyncio.sleep(1)
+    await anim_msg.edit(content="🪙 ~~Lempar koin...~~ ⚡ Menentukan pemenang...")
+    await asyncio.sleep(1)
+
+    winner, loser = random.choice([(ctx.author, target), (target, ctx.author)])
+    w_uid = str(winner.id)
+    l_uid = str(loser.id)
+
+    add_coins(w_uid, amount * 2)
+    log_history(w_uid, f"⚔️ Duel menang vs {loser.display_name}",  +(amount))
+    log_history(l_uid, f"⚔️ Duel kalah vs {winner.display_name}", -(amount))
+    _active_duels.discard(ch_uid); _active_duels.discard(tg_uid)
+
+    embed = discord.Embed(title="⚔️ Hasil Duel!", color=discord.Color.gold())
+    embed.add_field(name="🏆 Pemenang",     value=winner.mention,               inline=True)
+    embed.add_field(name="💀 Kalah",        value=loser.mention,                inline=True)
+    embed.add_field(name="💰 Hadiah",       value=f"**{amount:,} Bcash**",      inline=True)
+    embed.add_field(name="Saldo Pemenang",  value=f"{get_coins(w_uid):,} Bcash",inline=True)
+    embed.add_field(name="Saldo Kalah",     value=f"{get_coins(l_uid):,} Bcash",inline=True)
+    embed.set_footer(text="Asisten Lurah BFL • Duel Bcash")
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════════════════════════════════
+#  LOTRE HARIAN (!lotre / !setlotre / !drawlotre)
+# ═══════════════════════════════════════════════════════
+LOTTERY_PRICE = 5
+
+def load_lottery():
+    return load_json(LOTTERY_FILE, default={
+        "tickets":      {},
+        "prize_label":  "",
+        "open":         False,
+        "date":         "",
+        "last_winner":  None,
+    })
+
+def save_lottery(d):
+    save_json(LOTTERY_FILE, d)
+
+@bot.command(name="lotre", aliases=["lottery", "tiket"])
+async def lotre_cmd(ctx, jumlah: int = 1):
+    if ctx.author.id != OWNER_ID and ctx.channel.id != SPAM_CHANNEL_ID:
+        return await ctx.send(f"⚠️ Hanya di <#{SPAM_CHANNEL_ID}>!")
+
+    lot = load_lottery()
+    if not lot["open"]:
+        return await ctx.send("🔒 Lotre sedang ditutup. Tunggu admin buka lotre berikutnya dengan `!setlotre`.")
+    if not lot["prize_label"]:
+        return await ctx.send("⚠️ Admin belum set hadiah lotre.")
+    if jumlah < 1 or jumlah > 20:
+        return await ctx.send("❌ Beli min 1, max 20 tiket sekaligus.")
+
+    total_cost = LOTTERY_PRICE * jumlah
+    uid = str(ctx.author.id)
+    ensure_coins(uid)
+    bal = get_coins(uid)
+    if bal < total_cost:
+        return await ctx.send(
+            f"❌ Bcash tidak cukup! Butuh **{total_cost:,} Bcash** ({jumlah} tiket × {LOTTERY_PRICE}).\n"
+            f"Saldo kamu: **{bal:,} Bcash**."
+        )
+
+    add_coins(uid, -total_cost)
+    burn_coins(total_cost)
+    log_history(uid, f"🎫 Beli {jumlah} tiket lotre", -total_cost)
+
+    lot["tickets"][uid] = lot["tickets"].get(uid, 0) + jumlah
+    save_lottery(lot)
+
+    total_tiket_ku = lot["tickets"][uid]
+    total_semua    = sum(lot["tickets"].values())
+    peluang        = round((total_tiket_ku / total_semua) * 100, 1)
+
+    embed = discord.Embed(title="🎫 Tiket Lotre Dibeli!", color=discord.Color.purple())
+    embed.add_field(name="🎟️ Dibeli",      value=f"**{jumlah}x**",             inline=True)
+    embed.add_field(name="💰 Dibayar",     value=f"**{total_cost:,} Bcash**",   inline=True)
+    embed.add_field(name="🎯 Tiket Kamu",  value=f"**{total_tiket_ku}** tiket", inline=True)
+    embed.add_field(name="📊 Peluang",     value=f"**{peluang}%**",             inline=True)
+    embed.add_field(name="🏆 Hadiah",      value=f"**{lot['prize_label']}**",   inline=True)
+    embed.add_field(name="🎫 Total Tiket", value=f"{total_semua} beredar",      inline=True)
+    embed.set_footer(text=f"Harga tiket: {LOTTERY_PRICE} Bcash • Asisten Lurah BFL")
+    await ctx.send(embed=embed)
+
+@bot.command(name="infolotre", aliases=["ceklotre"])
+async def info_lotre(ctx):
+    lot     = load_lottery()
+    total   = sum(lot["tickets"].values())
+    uid     = str(ctx.author.id)
+    milik   = lot["tickets"].get(uid, 0)
+    peluang = round((milik / total) * 100, 1) if total > 0 else 0
+    status  = "🟢 Buka" if lot["open"] else "🔴 Tutup"
+
+    embed = discord.Embed(title="🎰 Info Lotre Harian", color=discord.Color.purple())
+    embed.add_field(name="Status",         value=status,                               inline=True)
+    embed.add_field(name="🏆 Hadiah",      value=lot["prize_label"] or "Belum diset",  inline=True)
+    embed.add_field(name="🎫 Total Tiket", value=f"{total} tiket",                     inline=True)
+    embed.add_field(name="🎟️ Tiket Kamu", value=f"{milik} tiket",                     inline=True)
+    embed.add_field(name="📊 Peluang",     value=f"{peluang}%",                        inline=True)
+    embed.add_field(name="💵 Harga Tiket", value=f"{LOTTERY_PRICE} Bcash/tiket",       inline=True)
+    if lot.get("last_winner"):
+        embed.add_field(name="👑 Pemenang Terakhir", value=f"<@{lot['last_winner']}>", inline=False)
+    embed.set_footer(text="Gunakan !lotre <jumlah> untuk beli tiket")
+    await ctx.send(embed=embed)
+
+@bot.command(name="setlotre")
+async def set_lotre(ctx, *, hadiah: str = None):
+    if not is_admin(ctx.author):
+        return await ctx.send("❌ Hanya admin.", delete_after=5)
+    if not hadiah:
+        return await ctx.send(
+            "❌ Format: `!setlotre <deskripsi hadiah>`\n"
+            "Contoh Bcash: `!setlotre 500 Bcash` (otomatis transfer)\n"
+            "Contoh bebas: `!setlotre Voucher Rp50.000`"
+        )
+    lot = load_lottery()
+    lot["prize_label"] = hadiah
+    lot["tickets"]     = {}
+    lot["open"]        = True
+    lot["date"]        = datetime.datetime.utcnow().strftime("%d/%m/%Y")
+    save_lottery(lot)
+    await ctx.send(
+        f"✅ **Lotre harian dibuka!**\n"
+        f"🏆 Hadiah: **{hadiah}**\n"
+        f"🎫 Harga tiket: **{LOTTERY_PRICE} Bcash**\n"
+        f"Gunakan `!drawlotre` untuk undi pemenang."
+    )
+
+@bot.command(name="drawlotre", aliases=["undian", "undi"])
+async def draw_lotre(ctx):
+    if not is_admin(ctx.author):
+        return await ctx.send("❌ Hanya admin.", delete_after=5)
+
+    lot = load_lottery()
+    if not lot["tickets"]:
+        return await ctx.send("❌ Belum ada tiket yang terjual.")
+
+    pool = []
+    for uid, count in lot["tickets"].items():
+        pool.extend([uid] * count)
+
+    winner_uid  = random.choice(pool)
+    prize_label = lot["prize_label"]
+    total_tiket = len(pool)
+
+    lot["open"]        = False
+    lot["last_winner"] = winner_uid
+    save_lottery(lot)
+
+    auto_note = ""
+    try:
+        prize_bcash = int(prize_label.lower().replace("bcash","").strip())
+        ensure_coins(winner_uid)
+        add_coins(winner_uid, prize_bcash)
+        mint_coins(prize_bcash)
+        log_history(winner_uid, f"🏆 Menang lotre ({prize_label})", +prize_bcash)
+        auto_note = f"\n✅ **{prize_bcash:,} Bcash** otomatis ditransfer ke pemenang!"
+    except (ValueError, AttributeError):
+        auto_note = f"\n📌 Admin harap berikan hadiah **{prize_label}** ke pemenang secara manual."
+
+    embed = discord.Embed(title="🎰 HASIL UNDIAN LOTRE!", color=discord.Color.gold())
+    embed.add_field(name="🏆 Pemenang",    value=f"<@{winner_uid}>",     inline=True)
+    embed.add_field(name="🎁 Hadiah",      value=f"**{prize_label}**",   inline=True)
+    embed.add_field(name="🎫 Total Tiket", value=f"{total_tiket} tiket", inline=True)
+    embed.set_footer(text="Selamat kepada pemenang! • Asisten Lurah BFL")
+    await ctx.send(f"🥁 **LOTRE DITUTUP!**{auto_note}", embed=embed)
+
+    try:
+        winner_obj = await bot.fetch_user(int(winner_uid))
+        await winner_obj.send(
+            f"🎉 **SELAMAT!** Kamu menang lotre di server BFL!\n"
+            f"🏆 Hadiah: **{prize_label}**\n"
+            f"Hubungi admin jika hadiah belum diterima."
+        )
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════
-bot.run(TOKEN)
