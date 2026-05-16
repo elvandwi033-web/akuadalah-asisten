@@ -2384,7 +2384,7 @@ def market_tick() -> int:
     save_price(data)
     return new_price
 
-@tasks.loop(minutes=2)
+@tasks.loop(seconds=10)
 async def auto_price_update():
     market_tick()
 
